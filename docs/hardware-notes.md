@@ -2,6 +2,18 @@
 
 hwmon/sysfs ground truth per device, gathered by running `plugin/scripts/hwmon-dump.sh` on real hardware over SSH. Every sensor-mapping decision in `plugin/py_modules/uc_steamos_agent/sensors/` depends on this — fill in before implementing Phase 3.
 
+## Dev tooling: seeing the box's screen remotely
+
+For visually confirming what a command actually did on the box (nav, launches, recovery attempts) instead of relying on someone physically watching and narrating — which was slow and once led to a stranding incident going unnoticed until reported:
+
+```bash
+ssh <user>@<box-ip> 'env DISPLAY=:0 magick x:root png:-' > screenshot.png
+```
+
+Validated on the "bazzite" box below: produces a correct, correctly-sized PNG (~1.2MB, matching the display resolution) in ~145ms, purely passive (reads the X server's root window pixmap via ImageMagick's `x:` pseudo-format — no input sent, no focus change, no risk of side effects). Works against the XWayland display Gamescope/Steam render through (`DISPLAY=:0`), no gamescope/compositor cooperation or D-Bus/portal needed. No setup required if `magick`/`imagemagick` and `DISPLAY=:0` are already present, which they were here.
+
+Things that looked promising but didn't work here, for reference: `import -window root` (ImageMagick's older screenshot tool) failed with an arg-parsing error on this box's ImageMagick 7.1.2 beta — `magick x:root` is the working equivalent. `spectacle -b -f -o file.png` (KDE's tool) hung indefinitely — its `org.freedesktop.portal.Desktop` Screenshot backend doesn't support the gamescope compositor. Wayland-native tools (`grim` etc.) aren't applicable since gamescope isn't wlroots-based.
+
 ## Devices tested
 
 ### "bazzite" box — Bazzite 44.20260820.0 (Kinoite/bazzite-deck image), kernel 7.2.0-ogc4.1.fc44.x86_64
