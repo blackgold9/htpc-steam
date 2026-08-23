@@ -45,3 +45,7 @@ def handle_status(config: AgentConfig, start_time: float) -> tuple[int, str, byt
 
 def handle_sensors(snapshot: dict) -> tuple[int, str, bytes]:
     return 200, "application/json", json.dumps(snapshot).encode("utf-8")
+
+
+def handle_games(games: list[dict]) -> tuple[int, str, bytes]:
+    return 200, "application/json", json.dumps({"games": games}).encode("utf-8")

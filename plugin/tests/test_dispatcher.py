@@ -141,6 +141,31 @@ def test_dispatch_force_quit_game():
     assert calls == [True]
 
 
+def test_dispatch_launch_game_uses_rungameid_uri():
+    calls = []
+    dispatcher = Dispatcher(keyboard_factory=_FakeKeyboard, launch_steam_uri_execute=lambda uri: calls.append(uri) or 4242)
+    dispatcher.dispatch("launch_game:1686940")
+    assert calls == ["steam://rungameid/1686940"]
+
+
+def test_dispatch_launch_game_sets_last_launch_pid_for_close():
+    close_calls = []
+    dispatcher = Dispatcher(
+        keyboard_factory=_FakeKeyboard,
+        launch_steam_uri_execute=lambda uri: 4242,
+        close_process_group=lambda pid: close_calls.append(pid),
+    )
+    dispatcher.dispatch("launch_game:1686940")
+    dispatcher.dispatch("close_last_launch")
+    assert close_calls == [4242]
+
+
+def test_dispatch_launch_game_rejects_non_numeric_appid():
+    dispatcher = Dispatcher(keyboard_factory=_FakeKeyboard, launch_steam_uri_execute=lambda uri: 4242)
+    with pytest.raises(UnknownCommandError):
+        dispatcher.dispatch("launch_game:not_a_number")
+
+
 def test_keyboard_created_lazily_and_reused():
     dispatcher = Dispatcher(keyboard_factory=_FakeKeyboard)
     assert dispatcher._keyboard is None

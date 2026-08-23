@@ -39,10 +39,14 @@ def _post(url, payload):
         return err.code, err.read()
 
 
-def _running_server(dispatcher=None, sensors_fn=None):
+def _running_server(dispatcher=None, sensors_fn=None, games_fn=None):
     config = AgentConfig(version="0.1.0", host="127.0.0.1", port=0)
     server = build_server(
-        config, uinput_available_fn=lambda: True, dispatcher=dispatcher or Dispatcher(), sensors_fn=sensors_fn
+        config,
+        uinput_available_fn=lambda: True,
+        dispatcher=dispatcher or Dispatcher(),
+        sensors_fn=sensors_fn,
+        games_fn=games_fn,
     )
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
@@ -116,6 +120,33 @@ def test_sensors_endpoint_404s_when_not_wired_up():
     try:
         try:
             _get(f"http://127.0.0.1:{port}/sensors")
+            assert False, "expected HTTPError"
+        except urllib.error.HTTPError as err:
+            assert err.code == 404
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_games_endpoint_serves_the_provided_list():
+    fake_games = [{"appid": 1686940, "name": "Bopl Battle", "last_played": 1787507429}]
+    server, _ = _running_server(games_fn=lambda: fake_games)
+    port = server.server_address[1]
+    try:
+        status, body = _get(f"http://127.0.0.1:{port}/games")
+        assert status == 200
+        assert json.loads(body) == {"games": fake_games}
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_games_endpoint_404s_when_not_wired_up():
+    server, _ = _running_server()  # no games_fn
+    port = server.server_address[1]
+    try:
+        try:
+            _get(f"http://127.0.0.1:{port}/games")
             assert False, "expected HTTPError"
         except urllib.error.HTTPError as err:
             assert err.code == 404

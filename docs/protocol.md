@@ -45,6 +45,18 @@ Optional auth: if `auth_token` is configured (non-empty), requests must carry a 
 
 Unavailable sensors are `null`, not `0`, so the integration can mark an entity unavailable instead of showing a false zero. Temperature is Celsius on the wire; unit conversion (°C/°F) is a display-layer concern in the integration. `battery` has no upstream (Windows) equivalent — desktop HTPCs have no battery. Status: Phase 3.
 
+### `GET /games`
+
+```json
+{
+  "games": [
+    {"appid": 1686940, "name": "Bopl Battle", "last_played": 1787507429}
+  ]
+}
+```
+
+Recently-played, currently-installed games, most recent first (`last_played` is a Unix epoch). Built from `localconfig.vdf` cross-referenced with `appmanifest_*.acf` (`plugin/py_modules/uc_steamos_agent/games/library.py`) — see `docs/hardware-notes.md` for why that source was chosen over the appmanifest's own (stale) `LastPlayed` field, and how compat tools (Proton, Steam Linux Runtime) get filtered out. `404` if the desktop user's home directory couldn't be resolved. To launch one, send `launch_game:<appid>` to `POST /command` (`docs/command-mapping.md`). Status: Phase 5, live-verified.
+
 ### `GET /shortcuts`
 
 Lists configured shortcut names (see `docs/command-mapping.md` for the `shortcut:<name>` command convention). Optional, cheap. Status: Phase 4.

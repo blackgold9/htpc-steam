@@ -14,6 +14,11 @@ than one command that silently tries several approaches: steam_overlay
 (Shift+Tab) and alt_f4 are just uinput combos via COMBO_KEY_COMMANDS;
 force_quit_game is a harder fallback (see game_control.py) for when
 neither reaches the game.
+
+Getting into a game is `launch_game:<appid>`, reusing the same
+steam://rungameid/<appid> URI launch as the fixed shortcuts (see
+launch.py) -- the game list itself comes from games/library.py via the
+agent's /games endpoint, not from the dispatcher.
 """
 
 import threading
@@ -100,6 +105,9 @@ class Dispatcher:
             if command == "force_quit_game":
                 self._force_quit_game_execute()
                 return
+            if command.startswith("launch_game:"):
+                self._dispatch_launch_game(command)
+                return
             raise UnknownCommandError(command)
 
     def _dispatch_set_volume(self, command: str) -> None:
@@ -111,6 +119,12 @@ class Dispatcher:
         if not 0 <= percent <= 100:
             raise UnknownCommandError(command)
         self._media_execute(media.set_volume_argv(percent))
+
+    def _dispatch_launch_game(self, command: str) -> None:
+        _, _, value = command.partition(":")
+        if not value.isdigit():
+            raise UnknownCommandError(command)
+        self._last_launch_pid = self._launch_steam_uri_execute(f"steam://rungameid/{value}")
 
     def _dispatch_close_last_launch(self) -> None:
         """No-op (not an error) if nothing has been launched yet -- a client

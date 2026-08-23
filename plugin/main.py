@@ -1,4 +1,5 @@
 import asyncio
+import pwd
 import sys
 import threading
 from pathlib import Path
@@ -13,6 +14,7 @@ from uc_steamos_agent.commands import launch, media, user_session
 from uc_steamos_agent.commands.dispatcher import Dispatcher
 from uc_steamos_agent.commands.uinput_probe import uinput_writable
 from uc_steamos_agent.config import load_config
+from uc_steamos_agent.games import library
 from uc_steamos_agent.http.server import build_server
 from uc_steamos_agent.sensors.collector import SensorCollector
 
@@ -30,7 +32,11 @@ class Plugin:
         )
         self.sensors = SensorCollector()
         self.sensors.start()
-        self.server = build_server(self.config, uinput_writable, self.dispatcher, self.sensors.snapshot)
+        steam_root = self._resolve_steam_root()
+        games_fn = (lambda: library.list_recent_games(steam_root=steam_root)) if steam_root else None
+        self.server = build_server(
+            self.config, uinput_writable, self.dispatcher, self.sensors.snapshot, games_fn=games_fn
+        )
         self._server_thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self._server_thread.start()
         decky.logger.info(
@@ -67,6 +73,17 @@ class Plugin:
             return user_session.session_env(uid)
         except (KeyError, OSError) as err:
             decky.logger.warning("Could not resolve session env for %s: %s", decky.DECKY_USER, err)
+            return None
+
+    def _resolve_steam_root(self):
+        """/games needs the desktop user's Steam data dir; this plugin runs
+        as root so `~` (DEFAULT_STEAM_ROOT) would resolve to /root instead.
+        Returns None if resolution fails, in which case /games is disabled."""
+        try:
+            home_dir = pwd.getpwnam(decky.DECKY_USER).pw_dir
+            return library.steam_root_for_home(home_dir)
+        except KeyError as err:
+            decky.logger.warning("Could not resolve home dir for %s: %s", decky.DECKY_USER, err)
             return None
 
     @staticmethod
