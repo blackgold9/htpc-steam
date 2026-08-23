@@ -14,33 +14,19 @@ def _fake_popen(calls, pid=4242):
     return popen
 
 
-def test_launch_exe_uses_shlex_split(monkeypatch):
+def test_launch_steam_uri_uses_steam_binary(monkeypatch):
     calls = []
     monkeypatch.setattr(launch.subprocess, "Popen", _fake_popen(calls))
-    pid = launch.launch_exe("/usr/bin/konsole --arg value")
-    assert calls[0][0] == ["/usr/bin/konsole", "--arg", "value"]
+    pid = launch.launch_steam_uri("steam://open/settings")
+    assert calls[0][0] == ["steam", "steam://open/settings"]
     assert calls[0][1]["start_new_session"] is True
     assert pid == 4242
 
 
-def test_launch_url_steam_uri_uses_steam_binary(monkeypatch):
+def test_launch_steam_uri_passes_through_env(monkeypatch):
     calls = []
     monkeypatch.setattr(launch.subprocess, "Popen", _fake_popen(calls))
-    launch.launch_url("steam://open/settings")
-    assert calls[0][0] == ["steam", "steam://open/settings"]
-
-
-def test_launch_url_web_uses_xdg_open(monkeypatch):
-    calls = []
-    monkeypatch.setattr(launch.subprocess, "Popen", _fake_popen(calls))
-    launch.launch_url("https://youtube.com")
-    assert calls[0][0] == ["xdg-open", "https://youtube.com"]
-
-
-def test_launch_passes_through_env(monkeypatch):
-    calls = []
-    monkeypatch.setattr(launch.subprocess, "Popen", _fake_popen(calls))
-    launch.launch_exe("/bin/true", env={"XDG_RUNTIME_DIR": "/run/user/1000"})
+    launch.launch_steam_uri("steam://open/games", env={"XDG_RUNTIME_DIR": "/run/user/1000"})
     assert calls[0][1]["env"] == {"XDG_RUNTIME_DIR": "/run/user/1000"}
 
 

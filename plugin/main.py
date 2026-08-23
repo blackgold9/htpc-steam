@@ -1,5 +1,4 @@
 import asyncio
-import os
 import sys
 import threading
 from pathlib import Path
@@ -24,14 +23,10 @@ class Plugin:
         self.loop = asyncio.get_event_loop()
         self.config = load_config(decky.DECKY_PLUGIN_SETTINGS_DIR, decky.DECKY_PLUGIN_VERSION)
         session_env = self._resolve_session_env()
-        shortcuts_dir = os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "shortcuts")
-        os.makedirs(shortcuts_dir, exist_ok=True)
 
         self.dispatcher = Dispatcher(
             media_execute=self._bind_env(media.execute, session_env),
-            launch_exe_execute=self._bind_env(launch.launch_exe, session_env),
-            launch_url_execute=self._bind_env(launch.launch_url, session_env),
-            shortcuts_dir=shortcuts_dir,
+            launch_steam_uri_execute=self._bind_env(launch.launch_steam_uri, session_env),
         )
         self.sensors = SensorCollector()
         self.sensors.start()

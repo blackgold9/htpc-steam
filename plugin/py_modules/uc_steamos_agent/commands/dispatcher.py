@@ -1,12 +1,15 @@
 """Command-string -> action dispatch.
 
 Full scope through Phase 4: navigation, media transport, Gamescope's own
-hotkeys, power management, volume, and app/URL launching (docs/command-mapping.md).
+hotkeys, power management, volume, and fixed Steam URI shortcuts
+(docs/command-mapping.md). General-purpose app/URL launching was built and
+then removed after live testing found an unrecoverable full-screen-takeover
+gap -- see launch.py's docstring.
 """
 
 import threading
 
-from . import launch, media, power, shortcuts
+from . import launch, media, power
 from .keycodes import ALL_KEYCODES, COMBO_KEY_COMMANDS, SIMPLE_KEY_COMMANDS
 from .uinput_device import UinputKeyboard
 
@@ -16,7 +19,7 @@ POWER_RESPONSE_DELAY_S = 0.2
 
 # Fixed steam:// destinations exposed as named commands, replacing upstream's
 # win_i (Settings) with no direct equivalent otherwise. See docs/command-mapping.md.
-LAUNCH_URL_COMMANDS = {
+STEAM_URI_COMMANDS = {
     "steam_settings": "steam://open/settings",
     "steam_library": "steam://open/games",
 }
@@ -39,10 +42,8 @@ class Dispatcher:
         keyboard_factory=UinputKeyboard,
         power_execute=power.execute,
         media_execute=media.execute,
-        launch_exe_execute=launch.launch_exe,
-        launch_url_execute=launch.launch_url,
+        launch_steam_uri_execute=launch.launch_steam_uri,
         close_process_group=launch.close_process_group,
-        shortcuts_dir: str = "",
         power_delay_s=POWER_RESPONSE_DELAY_S,
     ):
         self._keyboard_factory = keyboard_factory
@@ -50,10 +51,8 @@ class Dispatcher:
         self._lock = threading.Lock()
         self._power_execute = power_execute
         self._media_execute = media_execute
-        self._launch_exe_execute = launch_exe_execute
-        self._launch_url_execute = launch_url_execute
+        self._launch_steam_uri_execute = launch_steam_uri_execute
         self._close_process_group = close_process_group
-        self._shortcuts_dir = shortcuts_dir
         self._power_delay_s = power_delay_s
         self._last_launch_pid: int | None = None
 
@@ -81,19 +80,8 @@ class Dispatcher:
             if command.startswith("set_volume:"):
                 self._dispatch_set_volume(command)
                 return
-            if command in LAUNCH_URL_COMMANDS:
-                self._last_launch_pid = self._launch_url_execute(LAUNCH_URL_COMMANDS[command])
-                return
-            if command.startswith("launch_exe:"):
-                _, _, path = command.partition(":")
-                self._last_launch_pid = self._launch_exe_execute(path)
-                return
-            if command.startswith("launch_url:"):
-                _, _, url = command.partition(":")
-                self._last_launch_pid = self._launch_url_execute(url)
-                return
-            if command.startswith("shortcut:"):
-                self._dispatch_shortcut(command)
+            if command in STEAM_URI_COMMANDS:
+                self._last_launch_pid = self._launch_steam_uri_execute(STEAM_URI_COMMANDS[command])
                 return
             if command == "close_last_launch":
                 self._dispatch_close_last_launch()
@@ -109,17 +97,6 @@ class Dispatcher:
         if not 0 <= percent <= 100:
             raise UnknownCommandError(command)
         self._media_execute(media.set_volume_argv(percent))
-
-    def _dispatch_shortcut(self, command: str) -> None:
-        _, _, name = command.partition(":")
-        try:
-            content = shortcuts.read_shortcut(self._shortcuts_dir, name)
-        except shortcuts.ShortcutError as err:
-            raise UnknownCommandError(str(err)) from err
-        if shortcuts.is_url(content):
-            self._last_launch_pid = self._launch_url_execute(content)
-        else:
-            self._last_launch_pid = self._launch_exe_execute(content)
 
     def _dispatch_close_last_launch(self) -> None:
         """No-op (not an error) if nothing has been launched yet -- a client

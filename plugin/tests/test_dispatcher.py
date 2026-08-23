@@ -78,68 +78,22 @@ def test_dispatch_set_volume_rejects_out_of_range_and_non_numeric():
         dispatcher.dispatch("set_volume:loud")
 
 
-def test_dispatch_launch_exe():
+def test_dispatch_fixed_steam_uri_commands():
     calls = []
-    dispatcher = Dispatcher(keyboard_factory=_FakeKeyboard, launch_exe_execute=lambda path: calls.append(path))
-    dispatcher.dispatch("launch_exe:/usr/bin/konsole")
-    assert calls == ["/usr/bin/konsole"]
-
-
-def test_dispatch_launch_url():
-    calls = []
-    dispatcher = Dispatcher(keyboard_factory=_FakeKeyboard, launch_url_execute=lambda url: calls.append(url))
-    dispatcher.dispatch("launch_url:https://youtube.com")
-    assert calls == ["https://youtube.com"]
-
-
-def test_dispatch_fixed_steam_url_commands():
-    calls = []
-    dispatcher = Dispatcher(keyboard_factory=_FakeKeyboard, launch_url_execute=lambda url: calls.append(url))
+    dispatcher = Dispatcher(keyboard_factory=_FakeKeyboard, launch_steam_uri_execute=lambda uri: calls.append(uri))
     dispatcher.dispatch("steam_settings")
     dispatcher.dispatch("steam_library")
     assert calls == ["steam://open/settings", "steam://open/games"]
-
-
-def test_dispatch_shortcut_url_content(tmp_path):
-    (tmp_path / "Netflix").write_text("https://netflix.com")
-    calls = []
-    dispatcher = Dispatcher(
-        keyboard_factory=_FakeKeyboard,
-        launch_url_execute=lambda url: calls.append(("url", url)),
-        launch_exe_execute=lambda path: calls.append(("exe", path)),
-        shortcuts_dir=str(tmp_path),
-    )
-    dispatcher.dispatch("shortcut:Netflix")
-    assert calls == [("url", "https://netflix.com")]
-
-
-def test_dispatch_shortcut_exe_content(tmp_path):
-    (tmp_path / "VLC").write_text("/usr/bin/vlc")
-    calls = []
-    dispatcher = Dispatcher(
-        keyboard_factory=_FakeKeyboard,
-        launch_url_execute=lambda url: calls.append(("url", url)),
-        launch_exe_execute=lambda path: calls.append(("exe", path)),
-        shortcuts_dir=str(tmp_path),
-    )
-    dispatcher.dispatch("shortcut:VLC")
-    assert calls == [("exe", "/usr/bin/vlc")]
-
-
-def test_dispatch_unknown_shortcut_raises(tmp_path):
-    dispatcher = Dispatcher(keyboard_factory=_FakeKeyboard, shortcuts_dir=str(tmp_path))
-    with pytest.raises(UnknownCommandError):
-        dispatcher.dispatch("shortcut:DoesNotExist")
 
 
 def test_close_last_launch_closes_the_most_recent_pid():
     calls = []
     dispatcher = Dispatcher(
         keyboard_factory=_FakeKeyboard,
-        launch_url_execute=lambda url: 4242,
+        launch_steam_uri_execute=lambda uri: 4242,
         close_process_group=lambda pid: calls.append(pid),
     )
-    dispatcher.dispatch("launch_url:https://youtube.com")
+    dispatcher.dispatch("steam_settings")
     dispatcher.dispatch("close_last_launch")
     assert calls == [4242]
 
@@ -155,10 +109,10 @@ def test_close_last_launch_only_closes_once():
     calls = []
     dispatcher = Dispatcher(
         keyboard_factory=_FakeKeyboard,
-        launch_url_execute=lambda url: 4242,
+        launch_steam_uri_execute=lambda uri: 4242,
         close_process_group=lambda pid: calls.append(pid),
     )
-    dispatcher.dispatch("launch_url:https://youtube.com")
+    dispatcher.dispatch("steam_settings")
     dispatcher.dispatch("close_last_launch")
     dispatcher.dispatch("close_last_launch")
     assert calls == [4242]  # second call is a no-op, pid already cleared
