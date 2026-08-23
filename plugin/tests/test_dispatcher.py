@@ -3,7 +3,16 @@ import time
 import pytest
 
 from uc_steamos_agent.commands.dispatcher import Dispatcher, UnknownCommandError
-from uc_steamos_agent.commands.keycodes import ALL_KEYCODES, KEY_1, KEY_LEFTCTRL, KEY_UP
+from uc_steamos_agent.commands.keycodes import (
+    ALL_KEYCODES,
+    KEY_1,
+    KEY_F4,
+    KEY_LEFTALT,
+    KEY_LEFTCTRL,
+    KEY_LEFTSHIFT,
+    KEY_TAB,
+    KEY_UP,
+)
 
 
 class _FakeKeyboard:
@@ -116,6 +125,20 @@ def test_close_last_launch_only_closes_once():
     dispatcher.dispatch("close_last_launch")
     dispatcher.dispatch("close_last_launch")
     assert calls == [4242]  # second call is a no-op, pid already cleared
+
+
+def test_dispatch_exit_game_combos_press_correct_keys():
+    dispatcher = Dispatcher(keyboard_factory=_FakeKeyboard)
+    dispatcher.dispatch("steam_overlay")
+    dispatcher.dispatch("alt_f4")
+    assert dispatcher._keyboard.combos == [(KEY_LEFTSHIFT, KEY_TAB), (KEY_LEFTALT, KEY_F4)]
+
+
+def test_dispatch_force_quit_game():
+    calls = []
+    dispatcher = Dispatcher(keyboard_factory=_FakeKeyboard, force_quit_game_execute=lambda: calls.append(True))
+    dispatcher.dispatch("force_quit_game")
+    assert calls == [True]
 
 
 def test_keyboard_created_lazily_and_reused():

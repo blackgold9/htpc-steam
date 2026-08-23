@@ -46,6 +46,7 @@ class SteamOSRemote(RemoteEntity):
             "f1", "f2", "f3", "f4", "f5", "f6", "f7", "f8", "f9", "f10", "f11", "f12",
             "steam_home", "steam_qam", "steam_l3", "steam_settings", "steam_library",
             "close_last_launch",
+            "steam_overlay", "alt_f4", "force_quit_game",
             "power_sleep", "power_hibernate", "power_shutdown", "power_restart",
         ]
 
@@ -53,6 +54,7 @@ class SteamOSRemote(RemoteEntity):
             _create_navigation_page(),
             _create_volume_page(),
             _create_gamescope_page(),
+            _create_game_session_page(),
             _create_function_keys_page(),
             _create_power_page(),
         ]
@@ -149,6 +151,22 @@ def _create_gamescope_page() -> UiPage:
         create_ui_text("Settings", 0, 1, cmd="steam_settings"),
         create_ui_text("Library", 1, 1, cmd="steam_library"),
         create_ui_text("Close Launch", 2, 1, cmd="close_last_launch"),
+    ])
+    return page
+
+
+def _create_game_session_page() -> UiPage:
+    """Three separate, explicit ways to exit a running game — deliberately
+    not one command that silently tries several approaches, so the user
+    always knows which one actually fired (from the 2026-08-23 grilling
+    session that scoped this whole area). None of the three are verified
+    live yet, including from inside an actual running game (as opposed to
+    just a menu) — see docs/command-mapping.md."""
+    page = UiPage(page_id="game_session", name="Game Session")
+    page.items.extend([
+        create_ui_text("Overlay", 0, 0, cmd="steam_overlay"),
+        create_ui_text("Force Close", 1, 0, cmd="alt_f4"),
+        create_ui_text("Force Quit", 2, 0, cmd="force_quit_game"),
     ])
     return page
 

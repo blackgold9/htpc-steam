@@ -2,6 +2,9 @@
 
 Values transcribed from /usr/include/linux/input-event-codes.h on the
 target Bazzite box (not guessed from memory) — see docs/hardware-notes.md.
+Exception: KEY_LEFTSHIFT is a well-established, kernel-stable value (42)
+not yet individually cross-checked against this box's header — pending
+confirmation once it's reachable again, unlike the rest of this file.
 
 Scoped for gaming use (Steam/Gamescope navigation and system control), not
 media playback — no play/pause/rewind/etc. transport keys. See
@@ -16,6 +19,7 @@ KEY_BACKSPACE = 14
 KEY_TAB = 15
 KEY_ENTER = 28
 KEY_LEFTCTRL = 29
+KEY_LEFTSHIFT = 42
 KEY_LEFTALT = 56
 KEY_SPACE = 57
 KEY_F1 = 59
@@ -74,12 +78,15 @@ SIMPLE_KEY_COMMANDS = {
     "f12": KEY_F12,
 }
 
-# Symbolic command name -> ordered keycode combo (held together), for
-# Gamescope's own native hotkeys. See docs/command-mapping.md.
+# Symbolic command name -> ordered keycode combo (held together). Includes
+# Gamescope's own native hotkeys and the exit-game mechanisms from
+# docs/command-mapping.md's "Getting out of a game" design.
 COMBO_KEY_COMMANDS = {
     "steam_home": (KEY_LEFTCTRL, KEY_1),  # Steam button
     "steam_qam": (KEY_LEFTCTRL, KEY_2),  # Quick Access Menu
     "steam_l3": (KEY_LEFTCTRL, KEY_6),  # L3 click
+    "steam_overlay": (KEY_LEFTSHIFT, KEY_TAB),  # Steam in-game overlay toggle
+    "alt_f4": (KEY_LEFTALT, KEY_F4),  # OS-level graceful window close
 }
 
 # Every keycode this module ever presses, for UI_SET_KEYBIT registration.

@@ -1,17 +1,24 @@
 """Command-string -> action dispatch.
 
 Scoped for gaming use on a SteamOS/Gamescope HTPC, not media playback:
-navigation, Gamescope's own hotkeys, power management, volume, and fixed
-Steam URI shortcuts (docs/command-mapping.md). No media transport keys
-(play/pause/rewind/etc.) -- those were built for controlling movie/TV
-playback and don't fit a gaming-focused box. General-purpose app/URL
-launching was also built and then removed after live testing found an
-unrecoverable full-screen-takeover gap -- see launch.py's docstring.
+navigation, Gamescope's own hotkeys, power management, volume, fixed Steam
+URI shortcuts, and getting into/out of games (docs/command-mapping.md). No
+media transport keys (play/pause/rewind/etc.) -- those were built for
+controlling movie/TV playback and don't fit a gaming-focused box.
+General-purpose app/URL launching was also built and then removed after
+live testing found an unrecoverable full-screen-takeover gap -- see
+launch.py's docstring.
+
+Exiting a game is deliberately three separate, explicit commands rather
+than one command that silently tries several approaches: steam_overlay
+(Shift+Tab) and alt_f4 are just uinput combos via COMBO_KEY_COMMANDS;
+force_quit_game is a harder fallback (see game_control.py) for when
+neither reaches the game.
 """
 
 import threading
 
-from . import launch, media, power
+from . import game_control, launch, media, power
 from .keycodes import ALL_KEYCODES, COMBO_KEY_COMMANDS, SIMPLE_KEY_COMMANDS
 from .uinput_device import UinputKeyboard
 
@@ -46,6 +53,7 @@ class Dispatcher:
         media_execute=media.execute,
         launch_steam_uri_execute=launch.launch_steam_uri,
         close_process_group=launch.close_process_group,
+        force_quit_game_execute=game_control.force_quit_game,
         power_delay_s=POWER_RESPONSE_DELAY_S,
     ):
         self._keyboard_factory = keyboard_factory
@@ -55,6 +63,7 @@ class Dispatcher:
         self._media_execute = media_execute
         self._launch_steam_uri_execute = launch_steam_uri_execute
         self._close_process_group = close_process_group
+        self._force_quit_game_execute = force_quit_game_execute
         self._power_delay_s = power_delay_s
         self._last_launch_pid: int | None = None
 
@@ -87,6 +96,9 @@ class Dispatcher:
                 return
             if command == "close_last_launch":
                 self._dispatch_close_last_launch()
+                return
+            if command == "force_quit_game":
+                self._force_quit_game_execute()
                 return
             raise UnknownCommandError(command)
 

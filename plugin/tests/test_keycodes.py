@@ -18,3 +18,8 @@ def test_gamescope_hotkeys_use_ctrl_combos():
     assert kc.COMBO_KEY_COMMANDS["steam_home"] == (kc.KEY_LEFTCTRL, kc.KEY_1)
     assert kc.COMBO_KEY_COMMANDS["steam_qam"] == (kc.KEY_LEFTCTRL, kc.KEY_2)
     assert kc.COMBO_KEY_COMMANDS["steam_l3"] == (kc.KEY_LEFTCTRL, kc.KEY_6)
+
+
+def test_exit_game_combos():
+    assert kc.COMBO_KEY_COMMANDS["steam_overlay"] == (kc.KEY_LEFTSHIFT, kc.KEY_TAB)
+    assert kc.COMBO_KEY_COMMANDS["alt_f4"] == (kc.KEY_LEFTALT, kc.KEY_F4)
