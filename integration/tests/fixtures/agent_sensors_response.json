@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "timestamp": 1787455876.6915662,
+  "cpu": {
+    "name": "AMD Ryzen 9 8945HS w/ Radeon 780M Graphics",
+    "temp_c": 42.75,
+    "load_pct": 9.570552147239264,
+    "clock_mhz": 3680.02175,
+    "power_w": null
+  },
+  "gpu": {
+    "name": "GPU",
+    "temp_c": 35.0,
+    "load_pct": 26.0,
+    "has_dedicated_gpu": true
+  },
+  "memory": {
+    "used_gb": 3.1749801635742188,
+    "total_gb": 13.41324234008789
+  },
+  "storage": {
+    "used_gb": 236.56579971313477,
+    "total_gb": 928.92578125,
+    "used_pct": 25.466598568811634,
+    "temp_c": 37.85
+  },
+  "network": {
+    "up_kbps": 72.22202650876696,
+    "down_kbps": 510.96435889685847
+  },
+  "motherboard": {
+    "temp_avg_c": null,
+    "temp_max_c": null
+  },
+  "fans": [],
+  "battery": {
+    "present": false,
+    "percent": null,
+    "charging": null,
+    "power_w": null
+  }
+}

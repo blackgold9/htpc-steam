@@ -1,0 +1,60 @@
+[build-system]
+requires = ["setuptools>=65.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "uc-intg-steamos"
+dynamic = ["version"]
+description = "SteamOS HTPC Remote Integration for Unfolded Circle Remote Two/3"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [
+    { name = "Stephen Vanterpool" }
+]
+keywords = ["unfoldedcircle", "integration", "steamos", "bazzite", "gamescope", "system-monitor"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Home Automation",
+    "Topic :: System :: Monitoring",
+]
+
+dependencies = [
+    "ucapi-framework>=1.9.1",
+    "ucapi>=0.6.0",
+    "aiohttp>=3.9.0",
+    "wakeonlan>=3.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/stephenvanterpool/htpc-steam"
+Repository = "https://github.com/stephenvanterpool/htpc-steam"
+
+[tool.setuptools]
+packages = ["uc_intg_steamos", "uc_intg_steamos.entities"]
+package-dir = { "" = "src" }
+
+[tool.setuptools.package-data]
+uc_intg_steamos = ["icons/*.png"]
+
+[tool.setuptools.dynamic]
+version = { attr = "uc_intg_steamos.__version__" }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
+[tool.black]
+line-length = 120
+target-version = ['py311']

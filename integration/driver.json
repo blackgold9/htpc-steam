@@ -1,0 +1,38 @@
+{
+  "driver_id": "uc_intg_steamos",
+  "version": "0.1.0",
+  "min_core_api": "0.22.0",
+  "name": {
+    "en": "SteamOS HTPC"
+  },
+  "icon": "uc:computer",
+  "description": {
+    "en": "Monitor and control a SteamOS/Bazzite HTPC in Game Mode via the UC SteamOS Agent Decky Loader plugin."
+  },
+  "developer": {
+    "name": "Stephen Vanterpool",
+    "url": "https://github.com/stephenvanterpool/htpc-steam"
+  },
+  "home_page": "https://github.com/stephenvanterpool/htpc-steam",
+  "release_date": "2026-08-23",
+  "setup_data_schema": {
+    "title": {
+      "en": "SteamOS HTPC Setup"
+    },
+    "settings": [
+      {
+        "id": "info",
+        "label": {
+          "en": "Setup"
+        },
+        "field": {
+          "label": {
+            "value": {
+              "en": "Enter your SteamOS HTPC's connection details on the next screen. The UC SteamOS Agent Decky Loader plugin must already be installed and running on the HTPC."
+            }
+          }
+        }
+      }
+    ]
+  }
+}

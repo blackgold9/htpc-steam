@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "timestamp": 1787455999.0,
+  "cpu": {
+    "name": "Test CPU",
+    "temp_c": 55.5,
+    "load_pct": 42.0,
+    "clock_mhz": 3200.0,
+    "power_w": 28.5
+  },
+  "gpu": {
+    "name": "Test GPU",
+    "temp_c": 60.0,
+    "load_pct": 70.0,
+    "has_dedicated_gpu": true
+  },
+  "memory": {
+    "used_gb": 8.0,
+    "total_gb": 16.0
+  },
+  "storage": {
+    "used_gb": 500.0,
+    "total_gb": 1000.0,
+    "used_pct": 50.0,
+    "temp_c": 40.0
+  },
+  "network": {
+    "up_kbps": 1500.0,
+    "down_kbps": 25000.0
+  },
+  "motherboard": {
+    "temp_avg_c": 38.0,
+    "temp_max_c": 45.0
+  },
+  "fans": [
+    {"label": "nct6775 fan1", "rpm": 1800},
+    {"label": "nct6775 fan2", "rpm": 2200}
+  ],
+  "battery": {
+    "present": true,
+    "percent": 85.0,
+    "charging": true,
+    "power_w": 15.0
+  }
+}
