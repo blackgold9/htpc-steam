@@ -1,7 +1,10 @@
 """
 SteamOS remote entity with UI pages and system commands.
 
-Command set and pages differ from upstream (uc_intg_htpc): see
+Scoped for gaming use on a SteamOS/Gamescope HTPC, not media playback — no
+play/pause/rewind/etc. transport controls; those were built for controlling
+movie/TV playback on upstream's Windows HTPC and don't fit here. Command set
+and pages otherwise differ from upstream (uc_intg_htpc): see
 docs/command-mapping.md for the full Windows -> SteamOS/Gamescope mapping.
 Only commands the agent (plugin/) actually implements as of this writing are
 exposed here — app launching, shortcuts, and Bluetooth land in a later phase.
@@ -40,8 +43,7 @@ class SteamOSRemote(RemoteEntity):
             "arrow_up", "arrow_down", "arrow_left", "arrow_right", "enter", "escape",
             "back", "home", "end", "page_up", "page_down", "tab", "space", "delete",
             "backspace",
-            "play_pause", "play", "pause", "stop", "previous", "next", "fast_forward",
-            "rewind", "record", "volume_up", "volume_down", "mute",
+            "volume_up", "volume_down", "mute",
             "f1", "f2", "f3", "f4", "f5", "f6", "f7", "f8", "f9", "f10", "f11", "f12",
             "steam_home", "steam_qam", "steam_l3", "steam_settings", "steam_library",
             "close_last_launch",
@@ -53,7 +55,7 @@ class SteamOSRemote(RemoteEntity):
 
         pages = [
             _create_navigation_page(),
-            _create_media_page(),
+            _create_volume_page(),
             _create_gamescope_page(),
             _create_function_keys_page(),
             _create_power_page(device_config.wol_enabled),
@@ -123,21 +125,12 @@ def _create_navigation_page() -> UiPage:
     return page
 
 
-def _create_media_page() -> UiPage:
-    page = UiPage(page_id="media", name="Media Controls")
+def _create_volume_page() -> UiPage:
+    page = UiPage(page_id="volume", name="Volume")
     page.items.extend([
-        create_ui_icon("uc:rewind", 0, 0, cmd="rewind"),
-        create_ui_icon("uc:skip-back", 1, 0, cmd="previous"),
-        create_ui_icon("uc:play", 2, 0, cmd="play"),
-        create_ui_icon("uc:pause", 3, 0, cmd="pause"),
-        create_ui_icon("uc:skip-forward", 0, 1, cmd="next"),
-        create_ui_icon("uc:fast-forward", 1, 1, cmd="fast_forward"),
-        create_ui_icon("uc:square", 2, 1, cmd="stop"),
-        create_ui_icon("uc:circle", 3, 1, cmd="record"),
-        create_ui_icon("uc:volume-1", 0, 2, cmd="volume_down"),
-        create_ui_icon("uc:volume-x", 1, 2, cmd="mute"),
-        create_ui_icon("uc:volume-2", 2, 2, cmd="volume_up"),
-        create_ui_text("Play/Pause", 3, 2, cmd="play_pause"),
+        create_ui_icon("uc:volume-1", 0, 0, cmd="volume_down"),
+        create_ui_icon("uc:volume-x", 1, 0, cmd="mute"),
+        create_ui_icon("uc:volume-2", 2, 0, cmd="volume_up"),
     ])
     return page
 

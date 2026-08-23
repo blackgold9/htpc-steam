@@ -1,10 +1,12 @@
 """Command-string -> action dispatch.
 
-Full scope through Phase 4: navigation, media transport, Gamescope's own
-hotkeys, power management, volume, and fixed Steam URI shortcuts
-(docs/command-mapping.md). General-purpose app/URL launching was built and
-then removed after live testing found an unrecoverable full-screen-takeover
-gap -- see launch.py's docstring.
+Scoped for gaming use on a SteamOS/Gamescope HTPC, not media playback:
+navigation, Gamescope's own hotkeys, power management, volume, and fixed
+Steam URI shortcuts (docs/command-mapping.md). No media transport keys
+(play/pause/rewind/etc.) -- those were built for controlling movie/TV
+playback and don't fit a gaming-focused box. General-purpose app/URL
+launching was also built and then removed after live testing found an
+unrecoverable full-screen-takeover gap -- see launch.py's docstring.
 """
 
 import threading

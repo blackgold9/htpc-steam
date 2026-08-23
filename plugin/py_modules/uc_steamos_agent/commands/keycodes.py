@@ -2,6 +2,10 @@
 
 Values transcribed from /usr/include/linux/input-event-codes.h on the
 target Bazzite box (not guessed from memory) — see docs/hardware-notes.md.
+
+Scoped for gaming use (Steam/Gamescope navigation and system control), not
+media playback — no play/pause/rewind/etc. transport keys. See
+docs/command-mapping.md.
 """
 
 KEY_ESC = 1
@@ -38,16 +42,6 @@ KEY_DELETE = 111
 KEY_MUTE = 113
 KEY_VOLUMEDOWN = 114
 KEY_VOLUMEUP = 115
-KEY_PAUSE = 119
-KEY_STOP = 128  # "AC Stop" media key, not the letter S
-KEY_NEXTSONG = 163
-KEY_PLAYPAUSE = 164
-KEY_PREVIOUSSONG = 165
-KEY_STOPCD = 166
-KEY_RECORD = 167
-KEY_REWIND = 168
-KEY_PLAY = 207
-KEY_FASTFORWARD = 208
 
 # Symbolic command name -> single keycode, for the dispatcher's simple presses.
 SIMPLE_KEY_COMMANDS = {
@@ -66,15 +60,6 @@ SIMPLE_KEY_COMMANDS = {
     "end": KEY_END,
     "page_up": KEY_PAGEUP,
     "page_down": KEY_PAGEDOWN,
-    "play_pause": KEY_PLAYPAUSE,
-    "play": KEY_PLAY,
-    "pause": KEY_PAUSE,
-    "stop": KEY_STOP,
-    "previous": KEY_PREVIOUSSONG,
-    "next": KEY_NEXTSONG,
-    "fast_forward": KEY_FASTFORWARD,
-    "rewind": KEY_REWIND,
-    "record": KEY_RECORD,
     "f1": KEY_F1,
     "f2": KEY_F2,
     "f3": KEY_F3,

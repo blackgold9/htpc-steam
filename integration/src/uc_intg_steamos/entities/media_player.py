@@ -1,6 +1,12 @@
 """
 SteamOS media player entity for system monitoring display.
 
+Uses the media_player entity type purely as a UI vehicle for a compact
+multi-line stats dashboard (title/artist/album -> three lines of system
+stats) — this box is for gaming, not media playback, so there's no actual
+transport control here (no play/pause/etc.); only ON_OFF/SELECT_SOURCE/
+VOLUME/MUTE_TOGGLE are real.
+
 :license: MIT
 """
 
@@ -233,13 +239,6 @@ class SteamOSMediaPlayer(MediaPlayerEntity):
                 await self._device.send_command("volume_down")
             case media_player.Commands.MUTE_TOGGLE:
                 await self._device.send_command("mute")
-            case (
-                media_player.Commands.PLAY_PAUSE
-                | media_player.Commands.STOP
-                | media_player.Commands.NEXT
-                | media_player.Commands.PREVIOUS
-            ):
-                return StatusCodes.OK
             case _:
                 return StatusCodes.NOT_IMPLEMENTED
 
