@@ -165,12 +165,6 @@ class SteamOSDevice(PollingDevice):
             return False
         return await self._client.send_command(command)
 
-    async def power_on_wol(self) -> bool:
-        if self._client:
-            return await self._client.power_on_wol()
-        temp_client = SteamOSClient(self._config)
-        return await temp_client.power_on_wol()
-
     async def disconnect(self) -> None:
         if self._client:
             await self._client.close()

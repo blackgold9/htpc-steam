@@ -62,7 +62,6 @@ async def test_successful_setup_returns_populated_config(flow, monkeypatch):
         "name": "My Deck",
         "enable_hardware_monitoring": "enabled",
         "temperature_unit": "fahrenheit",
-        "mac_address": "AA:BB:CC:DD:EE:FF",
         "auth_token": "secret",
     })
 
@@ -71,7 +70,6 @@ async def test_successful_setup_returns_populated_config(flow, monkeypatch):
     assert config.host == "192.168.6.193"
     assert config.enable_hardware_monitoring is True
     assert config.temperature_unit == "fahrenheit"
-    assert config.mac_address == "AA:BB:CC:DD:EE:FF"
     assert config.auth_token == "secret"
 
 

@@ -60,11 +60,6 @@ class SteamOSSetupFlow(BaseSetupFlow[SteamOSConfig]):
                     },
                 },
                 {
-                    "id": "mac_address",
-                    "label": {"en": "MAC Address (Optional - for Wake-on-LAN)"},
-                    "field": {"text": {"value": ""}},
-                },
-                {
                     "id": "auth_token",
                     "label": {"en": "Agent Auth Token (Optional)"},
                     "field": {"text": {"value": ""}},
@@ -80,7 +75,6 @@ class SteamOSSetupFlow(BaseSetupFlow[SteamOSConfig]):
         name = input_values.get("name", "SteamOS HTPC").strip()
         enable_hw = input_values.get("enable_hardware_monitoring", "enabled") == "enabled"
         temp_unit = input_values.get("temperature_unit", "celsius")
-        mac = input_values.get("mac_address", "").strip()
         auth_token = input_values.get("auth_token", "").strip()
 
         config = SteamOSConfig(
@@ -89,7 +83,6 @@ class SteamOSSetupFlow(BaseSetupFlow[SteamOSConfig]):
             host=host,
             enable_hardware_monitoring=enable_hw,
             temperature_unit=temp_unit,
-            mac_address=mac,
             auth_token=auth_token,
         )
 
