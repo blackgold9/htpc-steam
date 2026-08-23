@@ -6,16 +6,14 @@ Ported near-verbatim from upstream: `device.py`, `entities/media_player.py`, `en
 
 ## Status
 
-Built and verified as far as possible **without a physical UC Remote** (none available yet). What's been confirmed:
-
 - All modules import and construct cleanly against the real `ucapi`/`ucapi-framework` packages (not just syntax-checked) — every entity constructor signature was checked against the actually-installed framework version, not assumed from upstream's usage.
 - `python -m uc_intg_steamos` actually starts: the real `ucapi.IntegrationAPI` logs `Driver is up: uc_intg_steamos, version: 0.1.0, api: 0.7.0` and its WebSocket server (the protocol a Remote connects over) is confirmed listening and accepting TCP connections.
-- 15 unit tests pass, including a protocol contract test that feeds the **actual live `/sensors` JSON captured from the Bazzite test box** (`tests/fixtures/agent_sensors_response.json`) through `client.parse_sensor_data()` and asserts the resulting `SystemData`.
+- 20 unit tests pass, including a protocol contract test that feeds the **actual live `/sensors` and `/games` JSON captured from the Bazzite test box** (`tests/fixtures/`, `tests/test_client_parsing.py`) through `client.py`'s parsers.
+- **Full pairing/setup flow confirmed on a real UC Remote 3 (2026-08-23)**: driver run on the Bazzite box, discovered by the Remote over mDNS across a different subnet (`ws://bazzite.local:9090/` — direct `.local` WebSocket resolution failed cross-subnet and had to be overridden with the plain IP at registration, but mDNS *discovery* itself worked cross-subnet), registered via `POST /intg/discover/{driverId}`, and driven end-to-end through `SteamOSSetupFlow`'s real multi-step `RequestUserInput` flow (the framework's restore-prompt screen, then our device-details form) via the Remote's local REST API (`PUT /intg/setup/{driverId}`) — not simulated. Setup completed with `state: OK`, all entities came up `ACTIVE`/`CONNECTED`: `remote.*`, `media_player.*` (monitoring dashboard), `media_player.*_games` (Game Launcher), and 11 `sensor.*` entities.
 
-What's **not** verified and needs the real Remote once you have one:
+What's still **not** verified:
 
-- The actual pairing/setup flow through the Remote's UI (`SteamOSSetupFlow`) — the logic is unit-tested with a mocked agent, but the real multi-step UI flow (`RequestUserInput` rendering, field validation round-trips) has never been driven by a real Remote or its web-configurator.
-- Whether the Remote's UI renders the custom pages (`entities/remote.py`'s Navigation/Media/Gamescope/Function Keys/Power pages) as intended — icon references (`uc:arrow-up` etc.) are copied from upstream but never visually confirmed.
+- Whether the Remote's on-device UI renders the custom pages (`entities/remote.py`'s Navigation/Volume/Gamescope/Game Session/Function Keys/Power pages) as intended, and the Game Launcher's SOURCE_LIST — entities were confirmed created and connected via the REST API, but attributes only push live once a human adds an entity to a button/activity on the physical Remote (`ucapi_framework` no-ops attribute updates for unconfigured entities) — that UI-layout step is a personalization choice left to the user, not driven from here. Icon references (`uc:arrow-up` etc.) are copied from upstream but never visually confirmed either.
 - Media-player monitoring views' icons: `SOURCE_ICONS` in `entities/media_player.py` references `icons/*.png` files that don't exist yet in this repo (upstream's originals weren't available to port) — `device.get_icon_base64()` degrades gracefully to an empty string when a file is missing, so nothing crashes, but the media player entity will show no image until icons are added.
 
 ## Installing once you have the Remote
@@ -29,8 +27,8 @@ This integration is an **external driver** (runs on a separate device, talks to 
    python -m uc_intg_steamos
    ```
    Leave `UC_DISABLE_MDNS_PUBLISH` unset (defaults to `false`/on) — that env var exists for dev use when you don't want mDNS noise, not for real pairing.
-2. On the Remote: open the Web Configurator (`http://<remote-ip>`) → **Integrations & Docks** → tap **+** → "SteamOS HTPC" should appear in the discovered list. Select it and follow the setup form (host IP, monitoring toggle, temp unit, MAC, auth token — `SteamOSSetupFlow`'s fields).
-3. If it doesn't appear: confirm the Remote and the driver's host are genuinely on the same subnet and that mDNS/multicast isn't blocked between them (the most common real-world failure, especially on mesh/guest Wi-Fi). Whether the manual-add flow accepts a bare host/IP for integrations (as opposed to Docks, which need a full `ws://` URL) hasn't been confirmed — check this hands-on if auto-discovery fails.
+2. On the Remote: open the Web Configurator (`http://<remote-ip>`) → **Integrations & Docks** → tap **+** → "SteamOS HTPC" should appear in the discovered list. Select it, confirm past the restore-from-backup prompt (nothing to restore on a first setup), then fill in the device form (name, HTPC IP, monitoring toggle, temp unit, optional auth token — `SteamOSSetupFlow`'s fields). Confirmed working end-to-end on real UC Remote 3 hardware, 2026-08-23.
+3. If "SteamOS HTPC" doesn't appear in the discovered list: mDNS *discovery* was confirmed to work even across different subnets in testing (a router-level mDNS reflector, evidently), so a same-subnet requirement is less likely to be the blocker than it once seemed — but if discovery genuinely comes up empty, that's still the first thing to check. A different failure mode was hit in testing instead: discovery found the driver via its `.local` mDNS hostname, but the Remote's own follow-up WebSocket connection to that hostname failed (`Connection refused`) — registering the driver again with the plain IP overridden worked. If the auto-discovered entry connects to a `.local` URL and setup won't progress, that's worth checking first.
 
 Alternatively, **Docker** (runs on any machine on your network, no local Python needed):
 
