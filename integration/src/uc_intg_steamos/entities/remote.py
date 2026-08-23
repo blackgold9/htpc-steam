@@ -159,9 +159,8 @@ def _create_game_session_page() -> UiPage:
     """Three separate, explicit ways to exit a running game — deliberately
     not one command that silently tries several approaches, so the user
     always knows which one actually fired (from the 2026-08-23 grilling
-    session that scoped this whole area). None of the three are verified
-    live yet, including from inside an actual running game (as opposed to
-    just a menu) — see docs/command-mapping.md."""
+    session that scoped this whole area). All three confirmed live against
+    a real running game — see docs/command-mapping.md's exit-game row."""
     page = UiPage(page_id="game_session", name="Game Session")
     page.items.extend([
         create_ui_text("Overlay", 0, 0, cmd="steam_overlay"),

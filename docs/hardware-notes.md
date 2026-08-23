@@ -12,6 +12,8 @@ ssh <user>@<box-ip> 'env DISPLAY=:0 magick x:root png:-' > screenshot.png
 
 Validated on the "bazzite" box below: produces a correct, correctly-sized PNG (~1.2MB, matching the display resolution) in ~145ms, purely passive (reads the X server's root window pixmap via ImageMagick's `x:` pseudo-format — no input sent, no focus change, no risk of side effects). Works against the XWayland display Gamescope/Steam render through (`DISPLAY=:0`), no gamescope/compositor cooperation or D-Bus/portal needed. No setup required if `magick`/`imagemagick` and `DISPLAY=:0` are already present, which they were here.
 
+**Known limitation, found 2026-08-23**: this only captures the *primary* XWayland surface (Big Picture / Steam's own UI). An actual running game renders black in the capture — consistent with Steam's `STEAM_MULTIPLE_XWAYLANDS=1` env var, which means each game gets its own separate XWayland instance this tool doesn't see. Fine for verifying Big Picture navigation and Steam's own screens (menus, overlay chrome); not useful for confirming in-game rendering itself. Process-list checks (`pgrep`/`ps`) remain the reliable way to confirm a game is actually running/closed when the screenshot can't show it directly.
+
 Things that looked promising but didn't work here, for reference: `import -window root` (ImageMagick's older screenshot tool) failed with an arg-parsing error on this box's ImageMagick 7.1.2 beta — `magick x:root` is the working equivalent. `spectacle -b -f -o file.png` (KDE's tool) hung indefinitely — its `org.freedesktop.portal.Desktop` Screenshot backend doesn't support the gamescope compositor. Wayland-native tools (`grim` etc.) aren't applicable since gamescope isn't wlroots-based.
 
 ## Devices tested

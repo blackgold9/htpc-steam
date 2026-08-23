@@ -9,10 +9,14 @@ Steam". This scans /proc the same way user_session.py's session-process
 discovery does, since this agent runs as root and can read any process's
 environ regardless of owner.
 
-Not yet live-tested: whether SteamAppId is actually set as expected on this
-box's Steam/Proton setup, and whether killing that pid's process group is
-sufficient to fully quit the game (vs. leaving orphaned children) are both
-unverified -- see docs/command-mapping.md's exit-game design.
+Confirmed live (2026-08-23) against a real running game (Bopl Battle via
+Proton): SteamAppId is genuinely set on every process in the tree, and
+killing the first match's process group fully tore down the whole game --
+including two other process groups it didn't directly own (reaper+bwrap;
+the Proton/pressure-vessel wrapper chain; the game binary itself are three
+separate groups). Almost certainly bubblewrap's sandbox teardown cascading
+to everything inside it, not simple process-group semantics -- see
+docs/command-mapping.md's exit-game row for the full finding.
 """
 
 import os
