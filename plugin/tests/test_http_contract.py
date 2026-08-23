@@ -39,9 +39,11 @@ def _post(url, payload):
         return err.code, err.read()
 
 
-def _running_server(dispatcher=None):
+def _running_server(dispatcher=None, sensors_fn=None):
     config = AgentConfig(version="0.1.0", host="127.0.0.1", port=0)
-    server = build_server(config, uinput_available_fn=lambda: True, dispatcher=dispatcher or Dispatcher())
+    server = build_server(
+        config, uinput_available_fn=lambda: True, dispatcher=dispatcher or Dispatcher(), sensors_fn=sensors_fn
+    )
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     return server, thread
@@ -90,6 +92,33 @@ def test_command_endpoint_dispatches_to_keyboard():
 
         status, body = _post(f"http://127.0.0.1:{port}/command", None)
         assert status == 400
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_sensors_endpoint_serves_the_provided_snapshot():
+    fake_snapshot = {"schema_version": 1, "timestamp": 123.4, "cpu": {"temp_c": 39.1}}
+    server, _ = _running_server(sensors_fn=lambda: fake_snapshot)
+    port = server.server_address[1]
+    try:
+        status, body = _get(f"http://127.0.0.1:{port}/sensors")
+        assert status == 200
+        assert json.loads(body) == fake_snapshot
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_sensors_endpoint_404s_when_not_wired_up():
+    server, _ = _running_server()  # no sensors_fn
+    port = server.server_address[1]
+    try:
+        try:
+            _get(f"http://127.0.0.1:{port}/sensors")
+            assert False, "expected HTTPError"
+        except urllib.error.HTTPError as err:
+            assert err.code == 404
     finally:
         server.shutdown()
         server.server_close()

@@ -14,6 +14,7 @@ from uc_steamos_agent.commands.dispatcher import Dispatcher
 from uc_steamos_agent.commands.uinput_probe import uinput_writable
 from uc_steamos_agent.config import load_config
 from uc_steamos_agent.http.server import build_server
+from uc_steamos_agent.sensors.collector import SensorCollector
 
 
 class Plugin:
@@ -22,7 +23,9 @@ class Plugin:
         self.loop = asyncio.get_event_loop()
         self.config = load_config(decky.DECKY_PLUGIN_SETTINGS_DIR, decky.DECKY_PLUGIN_VERSION)
         self.dispatcher = Dispatcher(media_execute=self._build_media_execute())
-        self.server = build_server(self.config, uinput_writable, self.dispatcher)
+        self.sensors = SensorCollector()
+        self.sensors.start()
+        self.server = build_server(self.config, uinput_writable, self.dispatcher, self.sensors.snapshot)
         self._server_thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self._server_thread.start()
         decky.logger.info(
@@ -42,6 +45,9 @@ class Plugin:
         dispatcher = getattr(self, "dispatcher", None)
         if dispatcher is not None:
             dispatcher.close()
+        sensors = getattr(self, "sensors", None)
+        if sensors is not None:
+            sensors.stop()
 
     async def _uninstall(self):
         pass

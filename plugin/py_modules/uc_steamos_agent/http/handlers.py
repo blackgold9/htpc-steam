@@ -41,3 +41,7 @@ def handle_status(config: AgentConfig, start_time: float) -> tuple[int, str, byt
         f"Listening on {config.host}:{config.port}\n"
     )
     return 200, "text/plain", body.encode("utf-8")
+
+
+def handle_sensors(snapshot: dict) -> tuple[int, str, bytes]:
+    return 200, "application/json", json.dumps(snapshot).encode("utf-8")

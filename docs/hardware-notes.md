@@ -4,9 +4,11 @@ hwmon/sysfs ground truth per device, gathered by running `plugin/scripts/hwmon-d
 
 ## Devices tested
 
-### "bazzite" desktop box — Bazzite 44.20260820.0 (Kinoite/bazzite-deck image), kernel 7.2.0-ogc4.1.fc44.x86_64
+### "bazzite" box — Bazzite 44.20260820.0 (Kinoite/bazzite-deck image), kernel 7.2.0-ogc4.1.fc44.x86_64
 
-AMD desktop (Ryzen-class CPU + AMD dGPU/APU, not a handheld), reached over SSH at 192.168.6.193. Confirmed running a real Gamescope session at the time of this dump: `gamescope-session-plus ogui-steam` launching `gamescope --prefer-output *,eDP-1 ... --steam` with Steam in `-gamepadui -steamos3 -steampal -steamdeck` (Big Picture/Deck UI), auto-started via SDDM autologin — i.e. this box is genuinely in the target environment, not just installed-but-idle.
+**Correction (Phase 3):** `GET /sensors` later identified the CPU as an **AMD Ryzen 9 8945HS w/ Radeon 780M Graphics** — a mobile/handheld-class APU (used in devices like the ROG Ally X, GPD Win Max 2, and similar compact PCs), not a desktop-socket chip as originally assumed below. The Gamescope launch args' `--prefer-output *,eDP-1` (an embedded-display connector, not DP/HDMI) was a hint missed at the time. Likely a mini-PC/SFF or laptop-class device with a built-in or LCD panel, not a full desktop tower. Doesn't change any finding below, but corrects the framing — this is closer to the plan's actual target hardware class than "desktop" suggested.
+
+Reached over SSH at 192.168.6.193. Confirmed running a real Gamescope session at the time of this dump: `gamescope-session-plus ogui-steam` launching `gamescope --prefer-output *,eDP-1 ... --steam` with Steam in `-gamepadui -steamos3 -steampal -steamdeck` (Big Picture/Deck UI), auto-started via SDDM autologin — i.e. this box is genuinely in the target environment, not just installed-but-idle.
 
 Raw dump: see `hwmon-dump.sh` output captured 2026-08-23T02:58:15Z (not committed verbatim — summarized below).
 
@@ -41,7 +43,7 @@ Findings:
 - **Network temp sensors**: naming varies by NIC driver — `r8169_0_*` (older Realtek driver convention, PCI-ID-suffixed name) vs. the active interface's own `enp151s0` hwmon with `PHY Temperature`/`MAC Temperature` labels (newer r8125-style). Not used by the network throughput sensor anyway (that reads `/sys/class/net/*/statistics/*_bytes` directly), so this is just a naming-convention note, not a blocker.
 - **Default route auto-detect**: confirmed working — `enp151s0` is both the default-route interface and the one with live PHY/MAC temps, consistent with the plan's `/proc/net/route`-based auto-detection approach.
 
-Open, still needed: a real Deck/handheld APU dump, to confirm CPU/GPU hwmon naming on fused-die hardware (this box has discrete `k10temp` + `amdgpu` as separate hwmon nodes, which may not hold on an APU) and to find the actual fan hwmon name (this box has none to compare against).
+~~Open, still needed: a real Deck/handheld APU dump~~ — **resolved**: this box's CPU turned out to be an APU (Ryzen 9 8945HS w/ Radeon 780M — see the Phase 3 correction above), and it still exposes `k10temp` (CPU) + `amdgpu` (GPU) as separate hwmon nodes despite being a fused die. The split-node convention holds on APU hardware, at least this one. Still open: the actual fan hwmon name — this box has none to compare against.
 
 **Phase 0 on-device checklist — all confirmed on this box (2026-08-22/23):**
 - Decky Loader was already installed; the plugin was picked up cleanly (`found plugin: uc-steamos-agent`, `Loaded UC SteamOS Agent` in `plugin_loader`'s journal).
@@ -49,6 +51,21 @@ Open, still needed: a real Deck/handheld APU dump, to confirm CPU/GPU hwmon nami
 - The HTTP server is reachable both from the box itself and over the LAN (`http://192.168.6.193:8086/health`).
 - **Cold reboot survival verified for real** (not just inferred from `enabled` unit status): rebooted the box, `plugin_loader.service` came back automatically (it's a system-level unit, not tied to any login session), our plugin auto-loaded, the Gamescope/Steam Big Picture session auto-started via SDDM autologin, and the agent was reachable again within ~30s of boot — no manual steps.
 - **Startup-time race found**: the plugin's own startup log line captured `uinput_available=False` at the exact moment `_main()` fired right after boot, but `GET /health` a few seconds later correctly showed `true`. `/dev/uinput` likely isn't immediately accessible the instant the plugin process starts during early boot. This validates re-probing live on every `/health` call (`uinput_writable()` is called fresh each request, not cached at startup) rather than trusting a one-time boot-time check — keep it that way through Phase 1+.
+
+**Phase 3 — `GET /sensors` confirmed fully live on this box (2026-08-23):**
+```
+cpu:     name="AMD Ryzen 9 8945HS w/ Radeon 780M Graphics", temp_c=42.75, load_pct=9.57,
+         clock_mhz=3680.0, power_w=null (confirmed: no CPU power hwmon on this box, as predicted)
+gpu:     temp_c=35.0, load_pct=26.0 (via gpu_busy_percent on the discovered card, not hwmon)
+memory:  used_gb=3.17, total_gb=13.41 (total is less than physical RAM — plausible for an APU,
+         which reserves shared memory for the iGPU framebuffer)
+storage: used_gb=236.6, total_gb=928.9, used_pct=25.5, temp_c=37.85
+network: up_kbps=72.2, down_kbps=511.0
+motherboard: null/null (unimplemented, as documented — no Super I/O hwmon to verify against)
+fans:    []  (confirmed: none present, as expected)
+battery: not present (confirmed: no BAT* entry, as expected)
+```
+Every field that was predicted to degrade to `null`/`[]` (CPU power, motherboard, fans, battery) did so correctly rather than crashing or returning a misleading value — the graceful-degradation design (`SensorCollector._safe`) held up under real conditions, not just the unit tests' simulated failures.
 
 Template for the next device once dumped:
 

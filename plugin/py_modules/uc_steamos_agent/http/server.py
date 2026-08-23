@@ -16,7 +16,10 @@ from . import handlers
 
 
 def build_server(
-    config: AgentConfig, uinput_available_fn: Callable[[], bool], dispatcher: Dispatcher
+    config: AgentConfig,
+    uinput_available_fn: Callable[[], bool],
+    dispatcher: Dispatcher,
+    sensors_fn: Callable[[], dict] | None = None,
 ) -> ThreadingHTTPServer:
     start_time = time.monotonic()
 
@@ -36,6 +39,8 @@ def build_server(
                 status, ctype, body = handlers.handle_health(config, start_time, uinput_available_fn())
             elif self.path == "/status":
                 status, ctype, body = handlers.handle_status(config, start_time)
+            elif self.path == "/sensors" and sensors_fn is not None:
+                status, ctype, body = handlers.handle_sensors(sensors_fn())
             else:
                 status, ctype, body = 404, "text/plain", b"not found"
             self._write(status, ctype, body)
