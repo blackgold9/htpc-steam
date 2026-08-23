@@ -6,6 +6,7 @@ signature drift that import-only checks would miss. No network I/O.
 from uc_intg_steamos.config import SteamOSConfig
 from uc_intg_steamos.device import SteamOSDevice
 from uc_intg_steamos.driver import SteamOSDriver
+from uc_intg_steamos.entities.game_launcher import SteamOSGameLauncher
 from uc_intg_steamos.entities.media_player import SteamOSMediaPlayer
 from uc_intg_steamos.entities.remote import SteamOSRemote
 from uc_intg_steamos.entities.sensor import create_sensors
@@ -32,6 +33,9 @@ async def test_driver_and_all_entities_construct_without_error():
 
     media_player = SteamOSMediaPlayer(config, device)
     assert media_player.id == "media_player.steamos_test"
+
+    game_launcher = SteamOSGameLauncher(config, device)
+    assert game_launcher.id == "media_player.steamos_test_games"
 
     sensors = create_sensors(config, device)
     assert len(sensors) == 11

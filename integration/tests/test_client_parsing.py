@@ -9,7 +9,7 @@ fields the real box didn't have populated (fans, battery).
 import json
 from pathlib import Path
 
-from uc_intg_steamos.client import parse_sensor_data
+from uc_intg_steamos.client import parse_games_data, parse_sensor_data
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -66,3 +66,33 @@ def test_handles_missing_top_level_sections_gracefully():
     assert sd.battery_present is False
     assert sd.network_up is None
     assert sd.network_down is None
+
+
+def test_parses_real_captured_games_response():
+    """Mirrors the actual /games response captured live on the Bazzite test
+    box after launching Bopl Battle (see docs/command-mapping.md)."""
+    raw = {
+        "games": [
+            {"appid": 1686940, "name": "Bopl Battle", "last_played": 1787507429},
+            {"appid": 2338140, "name": "Dokapon Kingdom: Connect", "last_played": 1786754345},
+        ]
+    }
+    games = parse_games_data(raw)
+    assert games == raw["games"]
+
+
+def test_parse_games_data_drops_malformed_entries():
+    raw = {
+        "games": [
+            {"appid": 100, "name": "Valid Game", "last_played": 1},
+            {"appid": 200},  # missing name
+            {"name": "No Appid"},
+            "not_a_dict",
+        ]
+    }
+    games = parse_games_data(raw)
+    assert games == [{"appid": 100, "name": "Valid Game", "last_played": 1}]
+
+
+def test_parse_games_data_handles_missing_key():
+    assert parse_games_data({}) == []

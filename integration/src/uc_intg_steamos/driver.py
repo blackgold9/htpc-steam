@@ -10,6 +10,7 @@ from ucapi_framework import BaseIntegrationDriver
 
 from uc_intg_steamos.config import SteamOSConfig
 from uc_intg_steamos.device import SteamOSDevice
+from uc_intg_steamos.entities.game_launcher import SteamOSGameLauncher
 from uc_intg_steamos.entities.media_player import SteamOSMediaPlayer
 from uc_intg_steamos.entities.remote import SteamOSRemote
 from uc_intg_steamos.entities.sensor import create_sensors
@@ -26,6 +27,7 @@ class SteamOSDriver(BaseIntegrationDriver[SteamOSDevice, SteamOSConfig]):
             entity_classes=[
                 lambda cfg, dev: [SteamOSMediaPlayer(cfg, dev)] if cfg.enable_hardware_monitoring else [],
                 SteamOSRemote,
+                SteamOSGameLauncher,
                 lambda cfg, dev: create_sensors(cfg, dev) if cfg.enable_hardware_monitoring else [],
             ],
             driver_id="uc_intg_steamos",

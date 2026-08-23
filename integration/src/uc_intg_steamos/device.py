@@ -34,6 +34,7 @@ class SteamOSDevice(PollingDevice):
         self._consecutive_failures: int = 0
         self._reconnect_poll_count: int = 0
         self._icon_cache: dict[str, str] = {}
+        self._games: list[dict[str, Any]] = []
 
     @property
     def identifier(self) -> str:
@@ -69,6 +70,19 @@ class SteamOSDevice(PollingDevice):
 
     def set_current_view(self, view: str) -> None:
         self._current_view = view
+
+    @property
+    def games(self) -> list[dict[str, Any]]:
+        return self._games
+
+    def appid_for_game(self, name: str) -> int | None:
+        for game in self._games:
+            if game["name"] == name:
+                return game["appid"]
+        return None
+
+    async def launch_game(self, appid: int) -> bool:
+        return await self.send_command(f"launch_game:{appid}")
 
     def get_icon_base64(self, icon_filename: str) -> str:
         if icon_filename in self._icon_cache:
@@ -107,6 +121,9 @@ class SteamOSDevice(PollingDevice):
         if self._config.enable_hardware_monitoring:
             self._system_data = self._client.system_data
 
+        if await self._client.update_games():
+            self._games = self._client.games
+
         self.push_update()
         return self._client
 
@@ -121,6 +138,9 @@ class SteamOSDevice(PollingDevice):
 
         if not self._client:
             return
+
+        if await self._client.update_games():
+            self._games = self._client.games
 
         if self._config.enable_hardware_monitoring:
             if await self._client.update_system_data():

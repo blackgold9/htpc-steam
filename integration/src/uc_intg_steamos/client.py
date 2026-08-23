@@ -100,6 +100,15 @@ def parse_sensor_data(raw: dict[str, Any]) -> SystemData:
     return sd
 
 
+def parse_games_data(raw: dict[str, Any]) -> list[dict[str, Any]]:
+    """Parse the agent's /games JSON (docs/protocol.md) into a list of
+    {"appid": int, "name": str, "last_played": int} dicts, most recent
+    first (the agent already sorts them; this just guards against a
+    malformed entry breaking the whole list)."""
+    games = raw.get("games") or []
+    return [g for g in games if isinstance(g, dict) and g.get("appid") is not None and g.get("name")]
+
+
 def _count_sensor_fields(data: Any) -> int:
     """Rough count of non-null leaf sensor values, for setup-time feedback."""
     count = 0
@@ -122,10 +131,15 @@ class SteamOSClient:
         self._config = config
         self._session: aiohttp.ClientSession | None = None
         self._system_data = SystemData()
+        self._games: list[dict[str, Any]] = []
 
     @property
     def system_data(self) -> SystemData:
         return self._system_data
+
+    @property
+    def games(self) -> list[dict[str, Any]]:
+        return self._games
 
     def _headers(self) -> dict[str, str]:
         if self._config.auth_token:
@@ -200,6 +214,23 @@ class SteamOSClient:
             return False
 
         self._system_data = parse_sensor_data(raw)
+        return True
+
+    async def update_games(self) -> bool:
+        """Independent of hardware monitoring -- the Game Launcher entity
+        needs this regardless of whether sensor polling is enabled."""
+        if not self._session:
+            return False
+        try:
+            url = f"http://{self._config.host}:{AGENT_PORT}/games"
+            async with self._session.get(url) as resp:
+                resp.raise_for_status()
+                raw = await resp.json()
+        except Exception as err:
+            _LOG.debug("Games fetch failed: %s", err)
+            return False
+
+        self._games = parse_games_data(raw)
         return True
 
     async def send_command(self, command: str) -> bool:
