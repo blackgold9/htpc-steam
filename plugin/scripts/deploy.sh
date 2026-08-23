@@ -18,8 +18,15 @@ if [ ! -f "$PLUGIN_DIR/dist/index.js" ]; then
   exit 1
 fi
 
+# plugin_loader re-asserts root ownership of a plugin's directory each time
+# it (re)loads it (e.g. after a restart or reboot), so this has to run
+# before every deploy, not just once — matches the official decky-plugin-template
+# VSCode tasks' chmodplugins step.
+echo "Ensuring $REMOTE_PLUGIN_DIR is writable..."
+ssh -p "$DECK_PORT" "$DECK_USER@$DECK_HOST" \
+  "sudo mkdir -p ~/$REMOTE_PLUGIN_DIR && sudo chown -R $DECK_USER:$DECK_USER ~/$REMOTE_PLUGIN_DIR"
+
 echo "Syncing $PLUGIN_DIR -> $DECK_USER@$DECK_HOST:$REMOTE_PLUGIN_DIR"
-ssh -p "$DECK_PORT" "$DECK_USER@$DECK_HOST" "mkdir -p ~/$REMOTE_PLUGIN_DIR"
 rsync -azp --delete \
   --exclude 'node_modules' --exclude '.git' --exclude 'src' --exclude 'tests' --exclude 'cli' \
   --rsh="ssh -p $DECK_PORT" \

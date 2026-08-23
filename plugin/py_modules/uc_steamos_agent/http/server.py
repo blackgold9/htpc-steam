@@ -1,19 +1,23 @@
 """ThreadingHTTPServer wiring for the agent's HTTP API.
 
 Threaded (not asyncio) so a slow handler can't block a concurrent request;
-`/command`, once it exists in Phase 1, will need a lock around uinput writes
-for the same reason.
+`Dispatcher` (see ../commands/dispatcher.py) holds its own lock around
+uinput writes for the same reason.
 """
 
+import json
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Callable
 
+from ..commands.dispatcher import Dispatcher
 from ..config import AgentConfig
 from . import handlers
 
 
-def build_server(config: AgentConfig, uinput_available_fn: Callable[[], bool]) -> ThreadingHTTPServer:
+def build_server(
+    config: AgentConfig, uinput_available_fn: Callable[[], bool], dispatcher: Dispatcher
+) -> ThreadingHTTPServer:
     start_time = time.monotonic()
 
     class Handler(BaseHTTPRequestHandler):
@@ -34,6 +38,24 @@ def build_server(config: AgentConfig, uinput_available_fn: Callable[[], bool]) -
                 status, ctype, body = handlers.handle_status(config, start_time)
             else:
                 status, ctype, body = 404, "text/plain", b"not found"
+            self._write(status, ctype, body)
+
+        def do_POST(self) -> None:
+            if self.path != "/command":
+                self._write(404, "text/plain", b"not found")
+                return
+
+            length = int(self.headers.get("Content-Length", 0))
+            raw = self.rfile.read(length) if length else b""
+            try:
+                data = json.loads(raw) if raw else {}
+                command = data["command"]
+            except (json.JSONDecodeError, KeyError, TypeError):
+                payload = {"status": "error", "message": "expected JSON body: {\"command\": \"...\"}"}
+                self._write(400, "application/json", json.dumps(payload).encode("utf-8"))
+                return
+
+            status, ctype, body = handlers.handle_command(dispatcher, command)
             self._write(status, ctype, body)
 
     return ThreadingHTTPServer((config.host, config.port), Handler)

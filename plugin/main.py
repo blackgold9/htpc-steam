@@ -9,6 +9,7 @@ sys.path.insert(0, str(Path(__file__).parent / "py_modules"))
 
 import decky
 
+from uc_steamos_agent.commands.dispatcher import Dispatcher
 from uc_steamos_agent.commands.uinput_probe import uinput_writable
 from uc_steamos_agent.config import load_config
 from uc_steamos_agent.http.server import build_server
@@ -19,7 +20,8 @@ class Plugin:
     async def _main(self):
         self.loop = asyncio.get_event_loop()
         self.config = load_config(decky.DECKY_PLUGIN_SETTINGS_DIR, decky.DECKY_PLUGIN_VERSION)
-        self.server = build_server(self.config, uinput_writable)
+        self.dispatcher = Dispatcher()
+        self.server = build_server(self.config, uinput_writable, self.dispatcher)
         self._server_thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self._server_thread.start()
         decky.logger.info(
@@ -36,6 +38,9 @@ class Plugin:
         if server is not None:
             server.shutdown()
             server.server_close()
+        dispatcher = getattr(self, "dispatcher", None)
+        if dispatcher is not None:
+            dispatcher.close()
 
     async def _uninstall(self):
         pass

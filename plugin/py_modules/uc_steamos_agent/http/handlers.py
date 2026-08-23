@@ -8,7 +8,20 @@ without a real HTTP connection. See docs/protocol.md for the wire contract.
 import json
 import time
 
+from ..commands.dispatcher import Dispatcher, UnknownCommandError
 from ..config import AgentConfig
+
+
+def handle_command(dispatcher: Dispatcher, command: str) -> tuple[int, str, bytes]:
+    try:
+        dispatcher.dispatch(command)
+    except UnknownCommandError:
+        payload = {"status": "error", "message": f"unknown command: {command}"}
+        return 400, "application/json", json.dumps(payload).encode("utf-8")
+    except OSError as err:
+        payload = {"status": "error", "message": str(err)}
+        return 500, "application/json", json.dumps(payload).encode("utf-8")
+    return 200, "application/json", json.dumps({"status": "ok"}).encode("utf-8")
 
 
 def handle_health(config: AgentConfig, start_time: float, uinput_available: bool) -> tuple[int, str, bytes]:
