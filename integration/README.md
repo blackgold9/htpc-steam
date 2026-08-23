@@ -20,20 +20,26 @@ What's **not** verified and needs the real Remote once you have one:
 
 ## Installing once you have the Remote
 
-You don't need to know Python or run anything by hand for the normal path — the Remote's own web interface installs a packaged integration:
+This integration is an **external driver** (runs on a separate device, talks to the Remote over the network) — not the Remote's separate sandboxed "custom driver" feature, which needs a PyInstaller-compiled binary via Unfolded Circle's own `r2-pyinstaller` toolchain (that's what upstream's `.tar.gz` release asset and its `.github/workflows/build.yml` actually build; it's unnecessary extra work for us). External drivers self-advertise over mDNS, so setup is just "run the process somewhere on the same LAN as the Remote":
 
-1. Zip this directory's contents the way upstream's release does (`driver.json`, `src/`, `pyproject.toml`, `README.md` at the root of the zip — see upstream's `.github/workflows/build.yml` for the exact packaging step, which this repo hasn't automated yet).
-2. Open the Remote's web interface (`http://<remote-ip>`) → **Settings → Integrations → Add Integration → Upload**, and select the zip.
-3. It'll appear as "SteamOS HTPC" in Available Integrations. Configure it with your SteamOS box's IP (the same one `plugin/` is deployed to) and the settings from `setup_flow.py`'s form.
+1. Run the driver on any machine on the **same LAN/subnet** as the Remote (mDNS discovery requires this — it won't cross VLANs or networks with client isolation, e.g. some guest Wi-Fi/mesh setups):
+   ```bash
+   cd integration
+   pip install -e .
+   python -m uc_intg_steamos
+   ```
+   Leave `UC_DISABLE_MDNS_PUBLISH` unset (defaults to `false`/on) — that env var exists for dev use when you don't want mDNS noise, not for real pairing.
+2. On the Remote: open the Web Configurator (`http://<remote-ip>`) → **Integrations & Docks** → tap **+** → "SteamOS HTPC" should appear in the discovered list. Select it and follow the setup form (host IP, monitoring toggle, temp unit, MAC, auth token — `SteamOSSetupFlow`'s fields).
+3. If it doesn't appear: confirm the Remote and the driver's host are genuinely on the same subnet and that mDNS/multicast isn't blocked between them (the most common real-world failure, especially on mesh/guest Wi-Fi). Whether the manual-add flow accepts a bare host/IP for integrations (as opposed to Docks, which need a full `ws://` URL) hasn't been confirmed — check this hands-on if auto-discovery fails.
 
-Alternatively, **Docker** (doesn't require touching the Remote's filesystem, runs on any machine on your network):
+Alternatively, **Docker** (runs on any machine on your network, no local Python needed):
 
 ```bash
 cd integration/docker
 docker compose up -d --build
 ```
 
-Then add the integration from the Remote's web interface the same way — Docker mode just runs the driver process somewhere other than the Remote itself; pairing still happens through the Remote's UI.
+`docker-compose.yml` uses `network_mode: host` deliberately — mDNS multicast doesn't traverse Docker's default bridge network, so bridge-mode would make the integration invisible to the Remote's auto-discovery. Pairing then works the same as step 2 above.
 
 ## Local dev loop (no Remote needed)
 

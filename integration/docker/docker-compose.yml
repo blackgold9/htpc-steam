@@ -6,8 +6,12 @@ services:
       dockerfile: docker/Dockerfile
     container_name: uc-intg-steamos
     restart: unless-stopped
-    ports:
-      - "9090:9090"
+    # Host networking is required, not optional: the driver advertises itself
+    # to the Remote via mDNS (see ucapi.IntegrationAPI.init()), and mDNS
+    # multicast doesn't traverse Docker's default bridge network. Without
+    # this, the integration will never be auto-discovered. See
+    # docs/command-mapping.md / the Phase 5 UC3-pairing runbook for details.
+    network_mode: host
     volumes:
       - ./data:/config
     environment:
