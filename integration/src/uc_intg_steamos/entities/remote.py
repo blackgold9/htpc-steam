@@ -43,7 +43,8 @@ class SteamOSRemote(RemoteEntity):
             "play_pause", "play", "pause", "stop", "previous", "next", "fast_forward",
             "rewind", "record", "volume_up", "volume_down", "mute",
             "f1", "f2", "f3", "f4", "f5", "f6", "f7", "f8", "f9", "f10", "f11", "f12",
-            "steam_home", "steam_qam", "steam_l3",
+            "steam_home", "steam_qam", "steam_l3", "steam_settings", "steam_library",
+            "close_last_launch",
             "power_sleep", "power_hibernate", "power_shutdown", "power_restart",
         ]
 
@@ -144,12 +145,23 @@ def _create_media_page() -> UiPage:
 def _create_gamescope_page() -> UiPage:
     """Gamescope's own native hotkeys (docs/command-mapping.md). Replaces
     upstream's Windows-Meta-key shortcuts page, which has no equivalent here:
-    Gamescope discards Left-Windows/Super combos before apps ever see them."""
+    Gamescope discards Left-Windows/Super combos before apps ever see them.
+
+    `Close Launch` is a deliberate safety valve: launching a URL (e.g. via
+    the free-text Send Command widget with `launch_url:...`) was confirmed
+    live to be able to strand the user on a full-screen app with no reliable
+    way back through any other command here — see docs/command-mapping.md's
+    Web URLs row. This button at least offers a one-tap attempt at recovery,
+    even though it's confirmed NOT to work for a D-Bus-activated app like
+    Firefox; it may still help for a freshly-launched process."""
     page = UiPage(page_id="gamescope", name="Gamescope")
     page.items.extend([
         create_ui_text("Steam Button", 0, 0, cmd="steam_home"),
         create_ui_text("Quick Access", 1, 0, cmd="steam_qam"),
         create_ui_text("L3", 2, 0, cmd="steam_l3"),
+        create_ui_text("Settings", 0, 1, cmd="steam_settings"),
+        create_ui_text("Library", 1, 1, cmd="steam_library"),
+        create_ui_text("Close Launch", 2, 1, cmd="close_last_launch"),
     ])
     return page
 
