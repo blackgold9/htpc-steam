@@ -1,0 +1,11 @@
+{
+  "name": "UC SteamOS Agent",
+  "author": "Stephen Vanterpool",
+  "flags": ["_root"],
+  "api_version": 1,
+  "publish": {
+    "tags": ["remote-control", "system-monitor", "unfolded-circle"],
+    "description": "LAN command/sensor agent for the Unfolded Circle SteamOS HTPC integration. Not intended for the public plugin store.",
+    "image": ""
+  }
+}

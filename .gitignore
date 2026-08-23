@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+*.egg-info/
+
+# Decky plugin build artifacts
+plugin/node_modules/
+plugin/dist/
+plugin/out/
+plugin/cli/
+plugin/.vscode/settings.json
+decky_plugin.py
+
+# Integration build artifacts
+integration/.venv/
+integration/data/
+
+# OS / editor
+.DS_Store
+*.swp
+.idea/
