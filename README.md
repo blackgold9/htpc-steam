@@ -11,9 +11,17 @@ See [`docs/protocol.md`](docs/protocol.md) for the wire protocol both sides impl
 
 ## Status
 
-Phases 0-4 built and verified live against a real Bazzite/Gamescope box (`docs/hardware-notes.md`): Decky plugin scaffold, uinput navigation, power/volume, native sensor collection, and Steam URI shortcuts (`steam_settings`/`steam_library`) all confirmed working on real hardware. The `uc_intg_steamos` integration is built and verified as far as possible without a physical UC Remote (see `integration/README.md`) — pairing against a real Remote is the next milestone once one's available.
+Working end-to-end on real hardware. Both halves are built, unit-tested (119 + 21 tests), and verified live against a Bazzite/Gamescope box and a physical UC Remote 3 — see `docs/hardware-notes.md` for the raw findings.
 
-Not yet done: Phase 5 packaging/docs polish, and a couple of deliberately-deferred items (virtual gamepad input, general-purpose app/URL launching — see `docs/command-mapping.md`'s "Deliberately not implemented" section for why).
+Confirmed on real hardware: uinput navigation of Big Picture, volume via PipeWire, native sensor collection, Steam URI shortcuts, the three-tier game-exit escalation (`steam_overlay` / `alt_f4` / `force_quit_game`), launching a game by appid from the recently-played list, and the full Remote pairing/setup flow with all entities coming up `ACTIVE`/`CONNECTED`.
+
+Not yet verified: the power commands (`power_sleep`/`hibernate`/`shutdown`/`restart`) are implemented and unit-tested but never fired live, since doing so takes the test box down; and how the Remote's on-device UI actually renders the custom pages, which needs a human to add the entities to a page first.
+
+Deliberately out of scope: Wake-on-LAN (a separate UC integration owns it), virtual gamepad input, and general-purpose app/URL launching — see `docs/command-mapping.md`'s "Deliberately not implemented" section for the reasoning on each.
+
+## Security
+
+The agent is an HTTP server running as root on your gaming box, and its command vocabulary includes shutdown and synthetic keystroke injection. It is off by default to the extent that it only listens on your LAN, but **there is no authentication unless you configure one.** Set `auth_token` in the agent's `config.json` and enter the same value during integration setup. Read [`docs/protocol.md`](docs/protocol.md)'s "Auth posture" section before exposing this on a network you don't control — it is explicit about what the token does and does not protect against.
 
 ## License
 

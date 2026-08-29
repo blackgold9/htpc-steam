@@ -5,7 +5,7 @@
   "api_version": 1,
   "publish": {
     "tags": ["remote-control", "system-monitor", "unfolded-circle"],
-    "description": "LAN command/sensor agent for the Unfolded Circle SteamOS HTPC integration. Not intended for the public plugin store.",
+    "description": "Exposes a LAN HTTP API for the Unfolded Circle SteamOS HTPC integration: key injection, volume, power, and native /sys hardware sensors. Requires root. Distributed via GitHub releases, not the Decky store.",
     "image": ""
   }
 }

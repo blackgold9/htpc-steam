@@ -8,7 +8,7 @@ Ported near-verbatim from upstream: `device.py`, `entities/media_player.py`, `en
 
 - All modules import and construct cleanly against the real `ucapi`/`ucapi-framework` packages (not just syntax-checked) — every entity constructor signature was checked against the actually-installed framework version, not assumed from upstream's usage.
 - `python -m uc_intg_steamos` actually starts: the real `ucapi.IntegrationAPI` logs `Driver is up: uc_intg_steamos, version: 0.1.0, api: 0.7.0` and its WebSocket server (the protocol a Remote connects over) is confirmed listening and accepting TCP connections.
-- 20 unit tests pass, including a protocol contract test that feeds the **actual live `/sensors` and `/games` JSON captured from the Bazzite test box** (`tests/fixtures/`, `tests/test_client_parsing.py`) through `client.py`'s parsers.
+- 21 unit tests pass, including a protocol contract test that feeds the **actual live `/sensors` and `/games` JSON captured from the Bazzite test box** (`tests/fixtures/`, `tests/test_client_parsing.py`) through `client.py`'s parsers.
 - **Full pairing/setup flow confirmed on a real UC Remote 3 (2026-08-23)**: driver run on the Bazzite box, discovered by the Remote over mDNS across a different subnet (`ws://bazzite.local:9090/` — direct `.local` WebSocket resolution failed cross-subnet and had to be overridden with the plain IP at registration, but mDNS *discovery* itself worked cross-subnet), registered via `POST /intg/discover/{driverId}`, and driven end-to-end through `SteamOSSetupFlow`'s real multi-step `RequestUserInput` flow (the framework's restore-prompt screen, then our device-details form) via the Remote's local REST API (`PUT /intg/setup/{driverId}`) — not simulated. Setup completed with `state: OK`, all entities came up `ACTIVE`/`CONNECTED`: `remote.*`, `media_player.*` (monitoring dashboard), `media_player.*_games` (Game Launcher), and 11 `sensor.*` entities.
 
 What's still **not** verified:
@@ -18,26 +18,52 @@ What's still **not** verified:
 
 ## Installing once you have the Remote
 
-This integration is an **external driver** (runs on a separate device, talks to the Remote over the network) — not the Remote's separate sandboxed "custom driver" feature, which needs a PyInstaller-compiled binary via Unfolded Circle's own `r2-pyinstaller` toolchain (that's what upstream's `.tar.gz` release asset and its `.github/workflows/build.yml` actually build; it's unnecessary extra work for us). External drivers self-advertise over mDNS, so setup is just "run the process somewhere on the same LAN as the Remote":
+There are three ways to run this, in rough order of how much you'll like living with them.
 
-1. Run the driver on any machine on the **same LAN/subnet** as the Remote (mDNS discovery requires this — it won't cross VLANs or networks with client isolation, e.g. some guest Wi-Fi/mesh setups):
-   ```bash
-   cd integration
-   pip install -e .
-   python -m uc_intg_steamos
-   ```
-   Leave `UC_DISABLE_MDNS_PUBLISH` unset (defaults to `false`/on) — that env var exists for dev use when you don't want mDNS noise, not for real pairing.
-2. On the Remote: open the Web Configurator (`http://<remote-ip>`) → **Integrations & Docks** → tap **+** → "SteamOS HTPC" should appear in the discovered list. Select it, confirm past the restore-from-backup prompt (nothing to restore on a first setup), then fill in the device form (name, HTPC IP, monitoring toggle, temp unit, optional auth token — `SteamOSSetupFlow`'s fields). Confirmed working end-to-end on real UC Remote 3 hardware, 2026-08-23.
-3. If "SteamOS HTPC" doesn't appear in the discovered list: mDNS *discovery* was confirmed to work even across different subnets in testing (a router-level mDNS reflector, evidently), so a same-subnet requirement is less likely to be the blocker than it once seemed — but if discovery genuinely comes up empty, that's still the first thing to check. A different failure mode was hit in testing instead: discovery found the driver via its `.local` mDNS hostname, but the Remote's own follow-up WebSocket connection to that hostname failed (`Connection refused`) — registering the driver again with the plain IP overridden worked. If the auto-discovered entry connects to a `.local` URL and setup won't progress, that's worth checking first.
+### Option A — upload to the Remote (custom driver)
 
-Alternatively, **Docker** (runs on any machine on your network, no local Python needed):
+The driver runs **on the Remote itself**, so there's no always-on host to keep
+alive. Grab `uc-intg-uc_intg_steamos-<version>-aarch64.tar.gz` from
+[Releases](https://github.com/blackgold9/htpc-steam/releases) and upload it in the
+Web Configurator under **Integrations & Docks -> + -> Install custom integration**.
+
+This is the path to prefer. The tarball is an aarch64 PyInstaller bundle built by
+`.github/workflows/release-integration.yml` using Unfolded Circle's own
+`r2-pyinstaller` image. Note that it is the one delivery path **not** yet
+exercised end-to-end — the pairing confirmed below was done with an external
+driver — so treat the first upload as the test.
+
+### Option B — Docker
 
 ```bash
-cd integration/docker
-docker compose up -d --build
+docker run -d --name uc-intg-steamos --network host \
+  -v uc-intg-steamos:/config \
+  ghcr.io/blackgold9/uc-intg-steamos:latest
 ```
 
-`docker-compose.yml` uses `network_mode: host` deliberately — mDNS multicast doesn't traverse Docker's default bridge network, so bridge-mode would make the integration invisible to the Remote's auto-discovery. Pairing then works the same as step 2 above.
+Or from a checkout, `cd integration/docker && docker compose up -d --build`.
+
+`network_mode: host` is required, not optional: mDNS multicast doesn't traverse
+Docker's default bridge network, so bridge-mode makes the integration invisible
+to the Remote's auto-discovery.
+
+### Option C — run it directly (external driver)
+
+External drivers self-advertise over mDNS, so setup is just "run the process
+somewhere on the same LAN as the Remote":
+
+```bash
+cd integration
+pip install -e .
+python -m uc_intg_steamos
+```
+
+Leave `UC_DISABLE_MDNS_PUBLISH` unset (defaults to `false`/on) — that env var exists for dev use when you don't want mDNS noise, not for real pairing.
+
+### Pairing (all three options)
+
+1. On the Remote: open the Web Configurator (`http://<remote-ip>`) → **Integrations & Docks** → tap **+** → "SteamOS HTPC" should appear in the discovered list. Select it, confirm past the restore-from-backup prompt (nothing to restore on a first setup), then fill in the device form (name, HTPC IP, monitoring toggle, temp unit, optional auth token — `SteamOSSetupFlow`'s fields). Confirmed working end-to-end on real UC Remote 3 hardware, 2026-08-23.
+2. If "SteamOS HTPC" doesn't appear in the discovered list: mDNS *discovery* was confirmed to work even across different subnets in testing (a router-level mDNS reflector, evidently), so a same-subnet requirement is less likely to be the blocker than it once seemed — but if discovery genuinely comes up empty, that's still the first thing to check. A different failure mode was hit in testing instead: discovery found the driver via its `.local` mDNS hostname, but the Remote's own follow-up WebSocket connection to that hostname failed (`Connection refused`) — registering the driver again with the plain IP overridden worked. If the auto-discovered entry connects to a `.local` URL and setup won't progress, that's worth checking first.
 
 ## Local dev loop (no Remote needed)
 
