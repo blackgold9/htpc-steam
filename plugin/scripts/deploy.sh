@@ -23,7 +23,7 @@ fi
 # before every deploy, not just once — matches the official decky-plugin-template
 # VSCode tasks' chmodplugins step.
 echo "Ensuring $REMOTE_PLUGIN_DIR is writable..."
-ssh -p "$DECK_PORT" "$DECK_USER@$DECK_HOST" \
+ssh -t -p "$DECK_PORT" "$DECK_USER@$DECK_HOST" \
   "sudo mkdir -p ~/$REMOTE_PLUGIN_DIR && sudo chown -R $DECK_USER:$DECK_USER ~/$REMOTE_PLUGIN_DIR"
 
 echo "Syncing $PLUGIN_DIR -> $DECK_USER@$DECK_HOST:$REMOTE_PLUGIN_DIR"
@@ -33,6 +33,6 @@ rsync -azp --delete \
   "$PLUGIN_DIR"/ "$DECK_USER@$DECK_HOST:$REMOTE_PLUGIN_DIR/"
 
 echo "Restarting Decky's plugin_loader service..."
-ssh -p "$DECK_PORT" "$DECK_USER@$DECK_HOST" "sudo systemctl restart plugin_loader"
+ssh -t -p "$DECK_PORT" "$DECK_USER@$DECK_HOST" "sudo systemctl restart plugin_loader"
 
 echo "Done. Check the Quick Access Menu for '$PLUGIN_NAME'."
