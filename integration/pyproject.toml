@@ -37,8 +37,8 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/stephenvanterpool/htpc-steam"
-Repository = "https://github.com/stephenvanterpool/htpc-steam"
+Homepage = "https://github.com/blackgold9/htpc-steam"
+Repository = "https://github.com/blackgold9/htpc-steam"
 
 [tool.setuptools]
 packages = ["uc_intg_steamos", "uc_intg_steamos.entities"]

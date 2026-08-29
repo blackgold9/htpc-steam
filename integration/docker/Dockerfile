@@ -11,7 +11,7 @@ ENV UC_INTEGRATION_INTERFACE="0.0.0.0"
 ENV UC_INTEGRATION_HTTP_PORT="9090"
 ENV UC_CONFIG_HOME="/config"
 ENV PYTHONUNBUFFERED=1
-LABEL org.opencontainers.image.source=https://github.com/stephenvanterpool/htpc-steam
+LABEL org.opencontainers.image.source=https://github.com/blackgold9/htpc-steam
 LABEL org.opencontainers.image.description="SteamOS HTPC Remote integration for Unfolded Circle Remote"
 LABEL org.opencontainers.image.licenses=MIT
 CMD ["python3", "-u", "-m", "uc_intg_steamos"]
