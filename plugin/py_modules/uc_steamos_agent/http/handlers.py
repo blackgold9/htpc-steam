@@ -49,3 +49,13 @@ def handle_sensors(snapshot: dict) -> tuple[int, str, bytes]:
 
 def handle_games(games: list[dict]) -> tuple[int, str, bytes]:
     return 200, "application/json", json.dumps({"games": games}).encode("utf-8")
+
+
+def handle_unauthorized() -> tuple[int, str, bytes]:
+    """401 for a missing/wrong X-UC-Token when the agent has a token configured.
+
+    Deliberately doesn't say whether the header was absent or merely wrong --
+    that distinction only helps someone guessing at it.
+    """
+    payload = {"status": "error", "message": "unauthorized"}
+    return 401, "application/json", json.dumps(payload).encode("utf-8")

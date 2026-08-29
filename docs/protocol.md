@@ -24,7 +24,7 @@ Request: `{"command": "<string>"}`. Response: `200 {"status": "ok"}` or `4xx {"s
 
 For `power_*` commands, the server responds `200` first and executes the `systemctl`/`loginctl` call ~150-300ms later on a background thread, since the host may go offline before a synchronous response could be sent. Status: Phase 1-2 (command vocabulary), see `docs/command-mapping.md`.
 
-Optional auth: if `auth_token` is configured (non-empty), requests must carry a matching `X-UC-Token` header or receive `401`. Off by default.
+Optional auth: if `auth_token` is configured (non-empty), requests must carry a matching `X-UC-Token` header or receive `401`. Off by default. See "Auth posture" below for what that does and does not buy you.
 
 ### `GET /sensors`
 
@@ -57,10 +57,20 @@ Unavailable sensors are `null`, not `0`, so the integration can mark an entity u
 
 Recently-played, currently-installed games, most recent first (`last_played` is a Unix epoch). Built from `localconfig.vdf` cross-referenced with `appmanifest_*.acf` (`plugin/py_modules/uc_steamos_agent/games/library.py`) — see `docs/hardware-notes.md` for why that source was chosen over the appmanifest's own (stale) `LastPlayed` field, and how compat tools (Proton, Steam Linux Runtime) get filtered out. `404` if the desktop user's home directory couldn't be resolved. To launch one, send `launch_game:<appid>` to `POST /command` (`docs/command-mapping.md`). Status: Phase 5, live-verified.
 
-### `GET /shortcuts`
-
-Lists configured shortcut names (see `docs/command-mapping.md` for the `shortcut:<name>` command convention). Optional, cheap. Status: Phase 4.
-
 ## Auth posture
 
-LAN-trust by default, matching upstream's zero-config model. The optional `X-UC-Token` header exists because a portable HTPC is more likely to join untrusted networks than a stationary Windows box, and the command vocabulary includes shutdown/reboot/exec — but it must stay strictly optional so setup stays zero-friction for users who don't want it.
+LAN-trust by default, matching upstream's zero-config model: no token configured means no authentication, and setup stays zero-friction. When `auth_token` is set, every endpoint requires the header — not just `/command` — since `/games` discloses the user's library and `/sensors` their hardware. The check is a constant-time compare and runs before routing, so an unauthenticated caller can't enumerate which endpoints exist.
+
+**This is plaintext HTTP, so the token is an authorization control, not a confidentiality one.** It is worth being precise about the difference, because the token is easy to over-trust:
+
+What it does stop:
+- Unauthenticated LAN peers that can reach port 8086 but can't observe traffic — the realistic case, since switched networks don't flood unicast. An IoT gadget, a housemate's laptop, or a compromised smart TV port-scanning the subnet and firing `power_shutdown` at anything that answers.
+- Malicious web pages doing DNS rebinding. A browser can send a cross-origin `POST` with `Content-Type: text/plain` and a JSON body as a *simple request* with no preflight, and this server ignores Content-Type — so without a token that request executes. Requiring a custom `X-UC-Token` header forces a CORS preflight, which this server doesn't answer, so the request never fires.
+
+What it does **not** stop:
+- A passive sniffer. The token is cleartext in every request — anyone on a shared medium, holding the Wi-Fi PSK, or sitting on a compromised router/ARP-spoofed path can read it and replay it.
+- Any tampering or replay in general. There's no integrity or nonce.
+
+TLS was considered and rejected: with no CA story for a LAN appliance, it means self-signed certs plus either cert pinning in the integration or disabled verification — encryption without authentication, at real setup cost, against a threat model (a sniffer already inside your LAN) that this project doesn't claim to defend. The honest posture is a token that raises the bar against the scanning/rebinding class of attack, documented as exactly that.
+
+Known gap: there's no `Host`-header check, so a DNS-rebinding attack still works against a *token-less* agent. If you run without a token, treat port 8086 as fully open to anything that can route to it.

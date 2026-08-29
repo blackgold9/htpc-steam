@@ -163,7 +163,14 @@ class SteamOSClient:
             await self._session.close()
             self._session = None
 
-    async def test_agent(self) -> bool:
+    async def agent_status(self) -> int | None:
+        """HTTP status from /health, or None if the host wasn't reachable at all.
+
+        Setup uses the distinction to tell "wrong IP / agent not running" apart
+        from "agent is there but rejected the auth token" (401) -- otherwise a
+        mistyped token reads as an unreachable host, which sends people
+        debugging the wrong thing entirely.
+        """
         session = self._session
         close_after = False
         if not session:
@@ -172,12 +179,15 @@ class SteamOSClient:
         try:
             url = f"http://{self._config.host}:{AGENT_PORT}/health"
             async with session.get(url) as resp:
-                return resp.status == 200
+                return resp.status
         except Exception:
-            return False
+            return None
         finally:
             if close_after:
                 await session.close()
+
+    async def test_agent(self) -> bool:
+        return await self.agent_status() == 200
 
     async def test_sensors(self) -> dict[str, Any]:
         """Test-connect to /sensors during setup; returns success + a rough value count."""

@@ -5,6 +5,7 @@ Threaded (not asyncio) so a slow handler can't block a concurrent request;
 uinput writes for the same reason.
 """
 
+import hmac
 import json
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -35,7 +36,23 @@ def build_server(
             self.end_headers()
             self.wfile.write(body)
 
+        def _authorized(self) -> bool:
+            """Opt-in shared-secret check (docs/protocol.md's "Auth posture").
+
+            Applies to every endpoint, not just /command: /games leaks the
+            user's library and /sensors their hardware, and the integration's
+            client sets X-UC-Token on the whole session anyway, so there's no
+            compatibility reason to carve exceptions. compare_digest because
+            this is a shared secret compared against attacker-supplied input.
+            """
+            if not config.auth_token:
+                return True
+            return hmac.compare_digest(self.headers.get("X-UC-Token", ""), config.auth_token)
+
         def do_GET(self) -> None:
+            if not self._authorized():
+                self._write(*handlers.handle_unauthorized())
+                return
             if self.path == "/health":
                 status, ctype, body = handlers.handle_health(config, start_time, uinput_available_fn())
             elif self.path == "/status":
@@ -49,6 +66,9 @@ def build_server(
             self._write(status, ctype, body)
 
         def do_POST(self) -> None:
+            if not self._authorized():
+                self._write(*handlers.handle_unauthorized())
+                return
             if self.path != "/command":
                 self._write(404, "text/plain", b"not found")
                 return

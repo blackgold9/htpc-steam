@@ -24,14 +24,16 @@ class _FakeKeyboard:
         pass
 
 
-def _get(url):
-    with urllib.request.urlopen(url, timeout=2) as resp:
+def _get(url, headers=None):
+    req = urllib.request.Request(url, headers=headers or {})
+    with urllib.request.urlopen(req, timeout=2) as resp:
         return resp.status, resp.read()
 
 
-def _post(url, payload):
+def _post(url, payload, headers=None):
     data = json.dumps(payload).encode("utf-8") if payload is not None else b""
-    req = urllib.request.Request(url, data=data, method="POST", headers={"Content-Type": "application/json"})
+    all_headers = {"Content-Type": "application/json", **(headers or {})}
+    req = urllib.request.Request(url, data=data, method="POST", headers=all_headers)
     try:
         with urllib.request.urlopen(req, timeout=2) as resp:
             return resp.status, resp.read()
@@ -39,8 +41,8 @@ def _post(url, payload):
         return err.code, err.read()
 
 
-def _running_server(dispatcher=None, sensors_fn=None, games_fn=None):
-    config = AgentConfig(version="0.1.0", host="127.0.0.1", port=0)
+def _running_server(dispatcher=None, sensors_fn=None, games_fn=None, auth_token=""):
+    config = AgentConfig(version="0.1.0", host="127.0.0.1", port=0, auth_token=auth_token)
     server = build_server(
         config,
         uinput_available_fn=lambda: True,
@@ -150,6 +152,81 @@ def test_games_endpoint_404s_when_not_wired_up():
             assert False, "expected HTTPError"
         except urllib.error.HTTPError as err:
             assert err.code == 404
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_no_token_configured_means_no_auth_required():
+    """The default posture (docs/protocol.md): LAN-trust, zero-friction setup."""
+    server, _ = _running_server(games_fn=lambda: [])
+    port = server.server_address[1]
+    try:
+        assert _get(f"http://127.0.0.1:{port}/health")[0] == 200
+        assert _get(f"http://127.0.0.1:{port}/games")[0] == 200
+        # a bogus token is ignored rather than rejected when none is configured
+        assert _get(f"http://127.0.0.1:{port}/health", {"X-UC-Token": "whatever"})[0] == 200
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_configured_token_is_required_on_every_endpoint():
+    dispatcher = Dispatcher(keyboard_factory=_FakeKeyboard)
+    server, _ = _running_server(
+        dispatcher, sensors_fn=lambda: {}, games_fn=lambda: [], auth_token="s3cret"
+    )
+    port = server.server_address[1]
+    try:
+        for path in ("/health", "/status", "/sensors", "/games"):
+            try:
+                _get(f"http://127.0.0.1:{port}{path}")
+                assert False, f"expected 401 for unauthenticated {path}"
+            except urllib.error.HTTPError as err:
+                assert err.code == 401, path
+                assert json.loads(err.read())["message"] == "unauthorized"
+
+        status, body = _post(f"http://127.0.0.1:{port}/command", {"command": "arrow_up"})
+        assert status == 401
+        # the command must not have reached the dispatcher
+        assert dispatcher._keyboard is None
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_wrong_token_is_rejected_and_correct_token_is_accepted():
+    dispatcher = Dispatcher(keyboard_factory=_FakeKeyboard)
+    server, _ = _running_server(dispatcher, auth_token="s3cret")
+    port = server.server_address[1]
+    try:
+        assert _post(f"http://127.0.0.1:{port}/command", {"command": "arrow_up"},
+                     {"X-UC-Token": "wrong"})[0] == 401
+        assert dispatcher._keyboard is None
+
+        status, body = _post(f"http://127.0.0.1:{port}/command", {"command": "arrow_up"},
+                             {"X-UC-Token": "s3cret"})
+        assert status == 200
+        assert json.loads(body) == {"status": "ok"}
+        assert dispatcher._keyboard.presses == [103]  # KEY_UP
+
+        assert _get(f"http://127.0.0.1:{port}/health", {"X-UC-Token": "s3cret"})[0] == 200
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_unknown_route_still_401s_before_404_when_token_configured():
+    """Auth runs before routing, so an unauthenticated probe can't enumerate
+    which endpoints exist."""
+    server, _ = _running_server(auth_token="s3cret")
+    port = server.server_address[1]
+    try:
+        try:
+            _get(f"http://127.0.0.1:{port}/unknown")
+            assert False, "expected HTTPError"
+        except urllib.error.HTTPError as err:
+            assert err.code == 401
     finally:
         server.shutdown()
         server.server_close()

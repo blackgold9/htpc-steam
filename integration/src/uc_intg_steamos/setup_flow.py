@@ -88,9 +88,17 @@ class SteamOSSetupFlow(BaseSetupFlow[SteamOSConfig]):
 
         client = SteamOSClient(config)
         try:
-            agent_ok = await client.test_agent()
-            if not agent_ok:
-                raise ValueError(f"Cannot connect to the SteamOS agent at {host}: connection failed or refused")
+            status = await client.agent_status()
+            if status == 401:
+                raise ValueError(
+                    f"The SteamOS agent at {host} rejected the auth token. Check the token in the "
+                    "agent's config.json on the HTPC, or clear both to disable authentication."
+                )
+            if status != 200:
+                raise ValueError(
+                    f"Cannot connect to the SteamOS agent at {host}: "
+                    + (f"agent returned HTTP {status}" if status else "connection failed or refused")
+                )
             _LOG.info("SteamOS agent is reachable")
 
             if enable_hw:
