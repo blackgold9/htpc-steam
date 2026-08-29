@@ -1,0 +1,6 @@
+# Runtime deps for the PyInstaller build (.github/workflows/release-integration.yml).
+# The r2-pyinstaller image installs from this file rather than the project itself,
+# so keep it in sync with [project.dependencies] in pyproject.toml.
+ucapi-framework>=1.9.1
+ucapi>=0.6.0
+aiohttp>=3.9.0

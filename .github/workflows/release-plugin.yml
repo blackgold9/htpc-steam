@@ -1,0 +1,108 @@
+name: Release Decky plugin
+
+# Tag-scoped so the two halves of this repo version independently:
+#   plugin-v0.1.0  -> this workflow
+#   intg-v0.1.0    -> release-integration.yml
+on:
+  push:
+    tags:
+      - "plugin-v*"
+  workflow_dispatch:
+
+env:
+  PLUGIN_NAME: uc-steamos-agent
+
+jobs:
+  build:
+    name: Build sideload zip
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Derive version
+        id: version
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            VERSION="${GITHUB_REF_NAME#plugin-v}"
+          else
+            VERSION="$(jq -r .version plugin/package.json)"
+          fi
+          echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Check the tag matches package.json
+        if: github.ref_type == 'tag'
+        # Decky reads the plugin version from package.json, not plugin.json, so
+        # a tag that disagrees with it would ship a mislabelled plugin.
+        run: |
+          PKG_VERSION="$(jq -r .version plugin/package.json)"
+          if [ "$PKG_VERSION" != "${{ steps.version.outputs.VERSION }}" ]; then
+            echo "Tag says ${{ steps.version.outputs.VERSION }} but plugin/package.json says $PKG_VERSION." >&2
+            echo "Bump package.json and re-tag." >&2
+            exit 1
+          fi
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: plugin/pnpm-lock.yaml
+
+      - name: Build frontend
+        working-directory: plugin
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
+          test -s dist/index.js
+
+      - name: Assemble plugin directory
+        # Mirrors what `decky plugin build` produces: a single top-level
+        # directory named after the plugin, which is what Decky's "install
+        # from zip" expects to unpack into ~/homebrew/plugins/.
+        run: |
+          STAGE="stage/${PLUGIN_NAME}"
+          mkdir -p "$STAGE"
+          cp -r \
+            plugin/plugin.json \
+            plugin/package.json \
+            plugin/main.py \
+            plugin/py_modules \
+            plugin/dist \
+            plugin/LICENSE \
+            plugin/README.md \
+            "$STAGE/"
+          find "$STAGE" -name '__pycache__' -type d -prune -exec rm -rf {} +
+          find "$STAGE" -name '*.pyc' -delete
+          # The sourcemap is ~1.4MB of dev-only weight on a handheld's storage.
+          rm -f "$STAGE/dist/index.js.map"
+
+      - name: Create zip
+        id: zip
+        run: |
+          ARTIFACT="${PLUGIN_NAME}-${{ steps.version.outputs.VERSION }}.zip"
+          (cd stage && zip -r "../${ARTIFACT}" "${PLUGIN_NAME}")
+          sha256sum "${ARTIFACT}" > "${ARTIFACT}.sha256"
+          echo "ARTIFACT=$ARTIFACT" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.zip.outputs.ARTIFACT }}
+          path: |
+            ${{ steps.zip.outputs.ARTIFACT }}
+            ${{ steps.zip.outputs.ARTIFACT }}.sha256
+          if-no-files-found: error
+
+      - name: Draft release
+        if: github.ref_type == 'tag'
+        uses: ncipollo/release-action@v1
+        with:
+          artifacts: "${{ steps.zip.outputs.ARTIFACT }},${{ steps.zip.outputs.ARTIFACT }}.sha256"
+          draft: true
+          generateReleaseNotes: true
+          artifactErrorsFailBuild: true
+          tag: ${{ github.ref_name }}
+          name: "Decky plugin ${{ steps.version.outputs.VERSION }}"

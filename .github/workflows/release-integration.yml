@@ -1,0 +1,160 @@
+name: Release UC integration
+
+# Tag-scoped: intg-v0.1.0. See release-plugin.yml for the other half.
+on:
+  push:
+    tags:
+      - "intg-v*"
+  workflow_dispatch:
+
+env:
+  # Docker image Unfolded Circle publish for cross-building aarch64 Python
+  # drivers that run on the Remote itself.
+  PYTHON_VER: 3.11.12-0.3.0
+
+jobs:
+  build:
+    name: Build custom-driver tarball
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.meta.outputs.VERSION }}
+      driver_id: ${{ steps.meta.outputs.DRIVER_ID }}
+      artifact: ${{ steps.meta.outputs.ARTIFACT_NAME }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Derive version and driver id
+        id: meta
+        working-directory: integration
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            VERSION="${GITHUB_REF_NAME#intg-v}"
+          else
+            VERSION="$(jq -r .version driver.json)"
+          fi
+          DRIVER_ID="$(jq -r .driver_id driver.json)"
+          echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "DRIVER_ID=$DRIVER_ID" >> "$GITHUB_OUTPUT"
+          echo "ARTIFACT_NAME=uc-intg-${DRIVER_ID}-${VERSION}-aarch64" >> "$GITHUB_OUTPUT"
+
+      - name: Check the tag matches driver.json
+        if: github.ref_type == 'tag'
+        working-directory: integration
+        # The Remote surfaces driver.json's version in its UI, so a tag that
+        # disagrees with it would ship a mislabelled driver.
+        run: |
+          JSON_VERSION="$(jq -r .version driver.json)"
+          if [ "$JSON_VERSION" != "${{ steps.meta.outputs.VERSION }}" ]; then
+            echo "Tag says ${{ steps.meta.outputs.VERSION }} but integration/driver.json says $JSON_VERSION." >&2
+            exit 1
+          fi
+
+      - name: Set up arm64 emulation
+        run: |
+          sudo apt-get update && sudo apt-get install -y qemu-user-static binfmt-support
+          docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
+
+      - name: PyInstaller build
+        # Adapted from upstream uc-intg-htpc's build.yml. Differences that
+        # matter, all driven by this repo's layout:
+        #   - runs from integration/, not the repo root
+        #   - src/ layout, hence --paths src
+        #   - entities live in a subpackage, so the hidden imports are
+        #     uc_intg_steamos.entities.*, not flat modules
+        #   - no --add-data for icons: this repo has none, and PyInstaller
+        #     hard-fails on a missing --add-data source path
+        run: |
+          docker run --rm --name builder \
+            --platform=linux/arm64 \
+            --user=$(id -u):$(id -g) \
+            -v ${GITHUB_WORKSPACE}/integration:/workspace \
+            docker.io/unfoldedcircle/r2-pyinstaller:${PYTHON_VER} \
+            bash -c "
+              cd /workspace &&
+              python -m pip install -r requirements.txt &&
+              pyinstaller --clean --onedir --name driver \
+                --add-data driver.json:. \
+                --collect-all zeroconf \
+                --collect-all ucapi \
+                --collect-all ucapi_framework \
+                --hidden-import uc_intg_steamos.driver \
+                --hidden-import uc_intg_steamos.device \
+                --hidden-import uc_intg_steamos.config \
+                --hidden-import uc_intg_steamos.client \
+                --hidden-import uc_intg_steamos.setup_flow \
+                --hidden-import uc_intg_steamos.const \
+                --hidden-import uc_intg_steamos.entities.media_player \
+                --hidden-import uc_intg_steamos.entities.remote \
+                --hidden-import uc_intg_steamos.entities.sensor \
+                --hidden-import uc_intg_steamos.entities.game_launcher \
+                --paths src \
+                src/uc_intg_steamos/__main__.py
+            "
+
+      - name: Prepare artifacts
+        # The Remote expects driver.json at the archive root and the binary
+        # tree under bin/.
+        run: |
+          mkdir -p artifacts/bin
+          mv integration/dist/driver/* artifacts/bin/
+          cp integration/driver.json artifacts/
+          tar czvf "${{ steps.meta.outputs.ARTIFACT_NAME }}.tar.gz" -C artifacts .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.meta.outputs.ARTIFACT_NAME }}
+          path: ${{ steps.meta.outputs.ARTIFACT_NAME }}.tar.gz
+          if-no-files-found: error
+
+  docker:
+    name: Publish container image
+    runs-on: ubuntu-24.04
+    needs: [build]
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/uc-intg-steamos
+          tags: |
+            type=match,pattern=intg-v(.*),group=1
+            type=raw,value=latest,enable=${{ github.ref_type == 'tag' }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: integration
+          file: integration/docker/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.ref_type == 'tag' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+  release:
+    name: Draft release
+    runs-on: ubuntu-24.04
+    needs: [build, docker]
+    if: github.ref_type == 'tag'
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.build.outputs.artifact }}
+      - run: sha256sum *.tar.gz > "${{ needs.build.outputs.driver_id }}.sha256"
+      - uses: ncipollo/release-action@v1
+        with:
+          artifacts: "*.tar.gz,${{ needs.build.outputs.driver_id }}.sha256"
+          draft: true
+          generateReleaseNotes: true
+          artifactErrorsFailBuild: true
+          tag: ${{ github.ref_name }}
+          name: "UC integration ${{ needs.build.outputs.version }}"

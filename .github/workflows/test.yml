@@ -1,0 +1,70 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  plugin:
+    name: Plugin backend (${{ matrix.python }})
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        # The agent is stdlib-only and ships to whatever Python the target
+        # box's Decky Loader runs, so test the range rather than one version.
+        python: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: pip install pytest
+      - name: Run backend tests
+        working-directory: plugin
+        # py_modules/ is Decky's import root on-device; mirror that here.
+        env:
+          PYTHONPATH: py_modules
+        run: pytest tests/ -q
+
+  integration:
+    name: Integration driver
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install
+        working-directory: integration
+        run: pip install -e ".[dev]"
+      - name: Run tests
+        working-directory: integration
+        run: pytest tests/ -q
+
+  frontend:
+    name: Plugin frontend build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: plugin/pnpm-lock.yaml
+      - name: Install
+        working-directory: plugin
+        run: pnpm install --frozen-lockfile
+      - name: Build
+        working-directory: plugin
+        run: pnpm build
+      - name: Verify the bundle was produced
+        working-directory: plugin
+        # The release zip is useless without this file and it's gitignored,
+        # so a silent build failure here would ship a plugin that won't load.
+        run: test -s dist/index.js
