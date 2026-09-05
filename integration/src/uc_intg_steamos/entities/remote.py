@@ -136,13 +136,12 @@ def _create_gamescope_page() -> UiPage:
     upstream's Windows-Meta-key shortcuts page, which has no equivalent here:
     Gamescope discards Left-Windows/Super combos before apps ever see them.
 
-    `Close Launch` is a deliberate safety valve: launching a URL (e.g. via
-    the free-text Send Command widget with `launch_url:...`) was confirmed
-    live to be able to strand the user on a full-screen app with no reliable
-    way back through any other command here — see docs/command-mapping.md's
-    Web URLs row. This button at least offers a one-tap attempt at recovery,
-    even though it's confirmed NOT to work for a D-Bus-activated app like
-    Firefox; it may still help for a freshly-launched process."""
+    `Close Launch` is a safety valve: it SIGTERMs the process group of the
+    last steam:// URI the agent launched (Settings/Library/launch_game). It
+    does not reach a D-Bus-activated app like a browser, which is exactly why
+    free-form URL launching was removed from the agent (see launch.py and
+    docs/command-mapping.md's Web URLs row); for the fixed steam:// launches
+    that are genuine children of the agent, it offers a one-tap recovery."""
     page = UiPage(page_id="gamescope", name="Gamescope")
     page.items.extend([
         create_ui_text("Steam Button", 0, 0, cmd="steam_home"),

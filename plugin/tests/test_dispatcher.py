@@ -2,7 +2,11 @@ import time
 
 import pytest
 
-from uc_steamos_agent.commands.dispatcher import Dispatcher, UnknownCommandError
+from uc_steamos_agent.commands.dispatcher import (
+    CommandExecutionError,
+    Dispatcher,
+    UnknownCommandError,
+)
 from uc_steamos_agent.commands.keycodes import (
     ALL_KEYCODES,
     KEY_1,
@@ -136,9 +140,33 @@ def test_dispatch_exit_game_combos_press_correct_keys():
 
 def test_dispatch_force_quit_game():
     calls = []
-    dispatcher = Dispatcher(keyboard_factory=_FakeKeyboard, force_quit_game_execute=lambda: calls.append(True))
+    dispatcher = Dispatcher(
+        keyboard_factory=_FakeKeyboard,
+        force_quit_game_execute=lambda: (calls.append(True), True)[1],
+    )
     dispatcher.dispatch("force_quit_game")
     assert calls == [True]
+
+
+def test_dispatch_force_quit_game_raises_when_nothing_found():
+    dispatcher = Dispatcher(
+        keyboard_factory=_FakeKeyboard,
+        force_quit_game_execute=lambda: False,
+    )
+    with pytest.raises(CommandExecutionError):
+        dispatcher.dispatch("force_quit_game")
+
+
+def test_power_execute_failure_is_logged_not_raised():
+    # _run_power is the deferred timer body; the HTTP response has already gone
+    # out, so a systemctl failure must be swallowed (it can't reach the client)
+    # but logged so it doesn't vanish when the daemon thread dies.
+    dispatcher = Dispatcher(keyboard_factory=_FakeKeyboard, power_execute=_boom)
+    dispatcher._run_power("power_shutdown")  # must not raise
+
+
+def _boom(_command):
+    raise RuntimeError("systemctl failed")
 
 
 def test_dispatch_launch_game_uses_rungameid_uri():

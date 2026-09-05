@@ -21,11 +21,14 @@ launch.py) -- the game list itself comes from games/library.py via the
 agent's /games endpoint, not from the dispatcher.
 """
 
+import logging
 import threading
 
 from . import game_control, launch, media, power
 from .keycodes import ALL_KEYCODES, COMBO_KEY_COMMANDS, SIMPLE_KEY_COMMANDS
 from .uinput_device import UinputKeyboard
+
+_LOG = logging.getLogger(__name__)
 
 # For power_* commands: let the HTTP response go out before the host
 # potentially suspends/reboots/powers off, per docs/protocol.md.
@@ -41,6 +44,12 @@ STEAM_URI_COMMANDS = {
 
 class UnknownCommandError(Exception):
     pass
+
+
+class CommandExecutionError(Exception):
+    """A recognised command whose action failed or had nothing to act on
+    (e.g. force_quit_game with no game running). Surfaced to the client as
+    a non-2xx rather than a silent 200 ok."""
 
 
 class Dispatcher:
@@ -77,6 +86,16 @@ class Dispatcher:
             self._keyboard = self._keyboard_factory(ALL_KEYCODES)
         return self._keyboard
 
+    def _run_power(self, command: str) -> None:
+        """Timer-thread body for power_* commands. The HTTP response has
+        already gone out by the time this runs, so a systemctl failure can't
+        be reported to the client -- log it, or it vanishes silently when the
+        timer thread dies."""
+        try:
+            self._power_execute(command)
+        except Exception:
+            _LOG.exception("power command %s failed", command)
+
     def dispatch(self, command: str) -> None:
         with self._lock:
             if command in SIMPLE_KEY_COMMANDS:
@@ -86,7 +105,7 @@ class Dispatcher:
                 self._get_keyboard().press_combo(*COMBO_KEY_COMMANDS[command])
                 return
             if command in power.POWER_COMMANDS:
-                timer = threading.Timer(self._power_delay_s, self._power_execute, args=(command,))
+                timer = threading.Timer(self._power_delay_s, self._run_power, args=(command,))
                 timer.daemon = True
                 timer.start()
                 return
@@ -103,7 +122,8 @@ class Dispatcher:
                 self._dispatch_close_last_launch()
                 return
             if command == "force_quit_game":
-                self._force_quit_game_execute()
+                if not self._force_quit_game_execute():
+                    raise CommandExecutionError("no running game process found")
                 return
             if command.startswith("launch_game:"):
                 self._dispatch_launch_game(command)

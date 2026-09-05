@@ -1,10 +1,13 @@
 import json
+import socket
+import subprocess
 import threading
 import urllib.error
 import urllib.request
 
-from uc_steamos_agent.commands.dispatcher import Dispatcher
+from uc_steamos_agent.commands.dispatcher import CommandExecutionError, Dispatcher
 from uc_steamos_agent.config import AgentConfig
+from uc_steamos_agent.http import handlers
 from uc_steamos_agent.http.server import build_server
 
 
@@ -227,6 +230,80 @@ def test_unknown_route_still_401s_before_404_when_token_configured():
             assert False, "expected HTTPError"
         except urllib.error.HTTPError as err:
             assert err.code == 401
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+class _RaisingDispatcher:
+    def __init__(self, exc):
+        self._exc = exc
+
+    def dispatch(self, command):
+        raise self._exc
+
+
+def test_handle_command_maps_execution_error_to_409():
+    status, _, body = handlers.handle_command(_RaisingDispatcher(CommandExecutionError("no game")), "x")
+    assert status == 409
+    assert json.loads(body)["message"] == "no game"
+
+
+def test_handle_command_maps_subprocess_error_to_500():
+    """A wpctl/wpctl-adjacent helper exiting non-zero under check=True raises
+    subprocess.CalledProcessError, which is NOT an OSError -- it must still be
+    caught and returned as a clean 500, not escape and reset the connection."""
+    err = subprocess.CalledProcessError(1, ["wpctl"])
+    status, _, body = handlers.handle_command(_RaisingDispatcher(err), "volume_up")
+    assert status == 500
+    assert "status" in json.loads(body)
+
+
+def test_handle_command_maps_oserror_to_500():
+    status, _, _ = handlers.handle_command(_RaisingDispatcher(OSError("no uinput")), "x")
+    assert status == 500
+
+
+def _raw_post(port: int, content_length_header: str, body: bytes = b"") -> int:
+    request = (
+        b"POST /command HTTP/1.1\r\nHost: x\r\nContent-Type: application/json\r\n"
+        + content_length_header.encode()
+        + b"\r\n\r\n"
+        + body
+    )
+    with socket.create_connection(("127.0.0.1", port), timeout=2) as sock:
+        sock.sendall(request)
+        response = sock.recv(4096)
+    return int(response.split(b" ", 2)[1])
+
+
+def test_negative_content_length_is_rejected_without_reading_body():
+    server, _ = _running_server()
+    port = server.server_address[1]
+    try:
+        assert _raw_post(port, "Content-Length: -1") == 400
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_oversized_content_length_is_rejected_without_buffering():
+    """A huge declared length must be refused before rfile.read() so it can't
+    drive memory exhaustion on this otherwise-unauthenticated-by-default box."""
+    server, _ = _running_server()
+    port = server.server_address[1]
+    try:
+        assert _raw_post(port, "Content-Length: 999999999999") == 413
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_malformed_content_length_is_rejected():
+    server, _ = _running_server()
+    port = server.server_address[1]
+    try:
+        assert _raw_post(port, "Content-Length: notanumber") == 400
     finally:
         server.shutdown()
         server.server_close()

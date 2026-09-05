@@ -6,9 +6,10 @@ without a real HTTP connection. See docs/protocol.md for the wire contract.
 """
 
 import json
+import subprocess
 import time
 
-from ..commands.dispatcher import Dispatcher, UnknownCommandError
+from ..commands.dispatcher import CommandExecutionError, Dispatcher, UnknownCommandError
 from ..config import AgentConfig
 
 
@@ -18,7 +19,14 @@ def handle_command(dispatcher: Dispatcher, command: str) -> tuple[int, str, byte
     except UnknownCommandError:
         payload = {"status": "error", "message": f"unknown command: {command}"}
         return 400, "application/json", json.dumps(payload).encode("utf-8")
-    except OSError as err:
+    except CommandExecutionError as err:
+        payload = {"status": "error", "message": str(err)}
+        return 409, "application/json", json.dumps(payload).encode("utf-8")
+    except (OSError, subprocess.SubprocessError) as err:
+        # OSError covers uinput/device failures and a missing binary
+        # (FileNotFoundError); SubprocessError covers a helper exiting non-zero
+        # under check=True (e.g. wpctl with no default sink) -- both must
+        # return a clean 500 rather than escape and reset the connection.
         payload = {"status": "error", "message": str(err)}
         return 500, "application/json", json.dumps(payload).encode("utf-8")
     return 200, "application/json", json.dumps({"status": "ok"}).encode("utf-8")

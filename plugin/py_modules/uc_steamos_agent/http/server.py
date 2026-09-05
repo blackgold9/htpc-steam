@@ -16,6 +16,13 @@ from ..config import AgentConfig
 from . import handlers
 
 
+# Commands are tiny JSON ({"command": "..."}); anything over this is a
+# malformed or hostile request, and we must not rfile.read() an
+# attacker-supplied length (a huge/negative Content-Length otherwise becomes a
+# memory-exhaustion or read-forever vector on a server with no other auth).
+MAX_COMMAND_BODY_BYTES = 64 * 1024
+
+
 def build_server(
     config: AgentConfig,
     uinput_available_fn: Callable[[], bool],
@@ -73,7 +80,19 @@ def build_server(
                 self._write(404, "text/plain", b"not found")
                 return
 
-            length = int(self.headers.get("Content-Length", 0))
+            raw_length = self.headers.get("Content-Length", 0)
+            try:
+                length = int(raw_length)
+            except (TypeError, ValueError):
+                self._write(400, "text/plain", b"invalid Content-Length")
+                return
+            if length < 0:
+                self._write(400, "text/plain", b"invalid Content-Length")
+                return
+            if length > MAX_COMMAND_BODY_BYTES:
+                self._write(413, "text/plain", b"request entity too large")
+                return
+
             raw = self.rfile.read(length) if length else b""
             try:
                 data = json.loads(raw) if raw else {}
