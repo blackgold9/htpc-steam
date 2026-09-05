@@ -1,6 +1,11 @@
 import os
 
-from uc_steamos_agent.games.library import list_recent_games, steam_root_for_home
+from uc_steamos_agent.games.library import (
+    RecentGamesCache,
+    _scan_signature,
+    list_recent_games,
+    steam_root_for_home,
+)
 
 
 def _write(path, content):
@@ -133,3 +138,56 @@ def test_no_steam_data_returns_empty_list(tmp_path):
 
 def test_steam_root_for_home_joins_expected_path():
     assert steam_root_for_home("/var/home/stephen") == "/var/home/stephen/.local/share/Steam"
+
+
+def test_scan_signature_is_stable_until_files_change(tmp_path):
+    root = str(tmp_path)
+    _localconfig(root, apps_block=_app_entry("100", "1787507429"))
+    _appmanifest(root, "100", "Bopl Battle")
+    before = _scan_signature(root)
+    assert _scan_signature(root) == before  # unchanged reads don't move it
+
+    # installing a game drops a new appmanifest -> the set of files changed
+    _appmanifest(root, "200", "New Game")
+    assert _scan_signature(root) != before
+
+
+def test_scan_signature_changes_when_localconfig_is_rewritten(tmp_path):
+    root = str(tmp_path)
+    _localconfig(root, apps_block=_app_entry("100", "1787507429"))
+    before = _scan_signature(root)
+    _localconfig(root, apps_block=_app_entry("100", "1787507500"))
+    assert _scan_signature(root) != before
+
+
+def test_cache_reuses_result_when_signature_unchanged():
+    scans = {"n": 0}
+
+    def fake_list(steam_root, max_games):
+        scans["n"] += 1
+        return [{"appid": 100, "name": "Bopl Battle", "last_played": 1}]
+
+    sig = {"v": ("a", 1, 10)}
+    cache = RecentGamesCache(
+        "/ignored", list_fn=fake_list, signature_fn=lambda root: sig["v"]
+    )
+    assert cache.games() == [{"appid": 100, "name": "Bopl Battle", "last_played": 1}]
+    cache.games()
+    cache.games()
+    assert scans["n"] == 1  # only the first call actually scanned
+
+    sig["v"] = ("a", 2, 10)  # files changed on disk
+    cache.games()
+    assert scans["n"] == 2
+
+
+def test_cache_respects_max_games_and_real_data(tmp_path):
+    root = str(tmp_path)
+    apps = "".join(_app_entry(str(i), str(100000 + i)) for i in range(4))
+    _localconfig(root, apps_block=apps)
+    for i in range(4):
+        _appmanifest(root, str(i), f"Game {i}")
+    cache = RecentGamesCache(root, max_games=2)
+    games = cache.games()
+    assert len(games) == 2
+    assert cache.games() is games  # cached object reused while nothing changed

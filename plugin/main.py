@@ -33,7 +33,7 @@ class Plugin:
         self.sensors = SensorCollector()
         self.sensors.start()
         steam_root = self._resolve_steam_root()
-        games_fn = (lambda: library.list_recent_games(steam_root=steam_root)) if steam_root else None
+        games_fn = library.RecentGamesCache(steam_root).games if steam_root else None
         self.server = build_server(
             self.config, uinput_writable, self.dispatcher, self.sensors.snapshot, games_fn=games_fn
         )

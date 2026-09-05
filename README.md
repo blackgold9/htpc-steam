@@ -11,7 +11,7 @@ See [`docs/protocol.md`](docs/protocol.md) for the wire protocol both sides impl
 
 ## Status
 
-Working end-to-end on real hardware. Both halves are built, unit-tested (131 + 21 tests), and verified live against a Bazzite/Gamescope box and a physical UC Remote 3 — see `docs/hardware-notes.md` for the raw findings.
+Working end-to-end on real hardware. Both halves are built, unit-tested (135 + 21 tests), and verified live against a Bazzite/Gamescope box and a physical UC Remote 3 — see `docs/hardware-notes.md` for the raw findings.
 
 Confirmed on real hardware: uinput navigation of Big Picture, volume via PipeWire, native sensor collection, Steam URI shortcuts, the three-tier game-exit escalation (`steam_overlay` / `alt_f4` / `force_quit_game`), launching a game by appid from the recently-played list, and the full Remote pairing/setup flow with all entities coming up `ACTIVE`/`CONNECTED`.
 

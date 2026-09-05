@@ -13,6 +13,7 @@ practically extractable from local VDF data -- see docs/hardware-notes.md.
 
 import glob
 import os
+import threading
 
 from .vdf import parse as parse_vdf
 
@@ -121,3 +122,59 @@ def list_recent_games(steam_root: str = DEFAULT_STEAM_ROOT, max_games: int = 10)
 
     games.sort(key=lambda g: g["last_played"], reverse=True)
     return games[:max_games]
+
+
+def _source_paths(steam_root: str) -> list[str]:
+    """Every file that feeds list_recent_games, sorted for a stable order."""
+    patterns = (
+        os.path.join(steam_root, "userdata", "*", "config", "localconfig.vdf"),
+        os.path.join(steam_root, "steamapps", "appmanifest_*.acf"),
+    )
+    paths: list[str] = []
+    for pattern in patterns:
+        paths.extend(glob.glob(pattern))
+    return sorted(paths)
+
+
+def _scan_signature(steam_root: str) -> tuple:
+    """Cheap change-detector for the recent-games cache: the identity + mtime +
+    size of every source file, without reading or parsing any of them. Steam
+    rewrites localconfig.vdf on session/last-played changes and drops/touches
+    an appmanifest on install/uninstall, so any real change moves this tuple."""
+    fingerprint = []
+    for path in _source_paths(steam_root):
+        try:
+            stat = os.stat(path)
+        except OSError:
+            continue
+        fingerprint.append((path, stat.st_mtime_ns, stat.st_size))
+    return tuple(fingerprint)
+
+
+class RecentGamesCache:
+    """Memoizes list_recent_games across polls, re-scanning only when the
+    underlying Steam data files change (see _scan_signature).
+
+    The integration polls GET /games on a fixed interval whether or not
+    anything happened; without this, every poll re-read and re-parsed every
+    localconfig.vdf + appmanifest -- needless CPU/IO on the gaming box for a
+    list that changes only when a game is played or installed. Instances are
+    bound to one steam_root; the lock matters because ThreadingHTTPServer
+    serves /games from request threads."""
+
+    def __init__(self, steam_root: str, max_games: int = 10, list_fn=list_recent_games, signature_fn=_scan_signature):
+        self._steam_root = steam_root
+        self._max_games = max_games
+        self._list_fn = list_fn
+        self._signature_fn = signature_fn
+        self._lock = threading.Lock()
+        self._signature: tuple | None = None
+        self._games: list[dict] = []
+
+    def games(self) -> list[dict]:
+        with self._lock:
+            signature = self._signature_fn(self._steam_root)
+            if signature != self._signature:
+                self._signature = signature
+                self._games = self._list_fn(steam_root=self._steam_root, max_games=self._max_games)
+            return self._games
