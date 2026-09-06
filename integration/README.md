@@ -62,8 +62,25 @@ Leave `UC_DISABLE_MDNS_PUBLISH` unset (defaults to `false`/on) — that env var 
 
 ### Pairing (all three options)
 
-1. On the Remote: open the Web Configurator (`http://<remote-ip>`) → **Integrations & Docks** → tap **+** → "SteamOS HTPC" should appear in the discovered list. Select it, confirm past the restore-from-backup prompt (nothing to restore on a first setup), then fill in the device form (name, HTPC IP, monitoring toggle, temp unit, optional auth token — `SteamOSSetupFlow`'s fields). Confirmed working end-to-end on real UC Remote 3 hardware, 2026-08-23.
+1. On the Remote: open the Web Configurator (`http://<remote-ip>`) → **Integrations & Docks** → tap **+** → "SteamOS HTPC" should appear in the discovered list. Select it, confirm past the restore-from-backup prompt (nothing to restore on a first setup), then fill in the device form (name, HTPC IP, monitoring toggle, temp unit, optional auth token, optional WoL MAC + broadcast address — `SteamOSSetupFlow`'s fields). Confirmed working end-to-end on real UC Remote 3 hardware, 2026-08-23.
 2. If "SteamOS HTPC" doesn't appear in the discovered list: mDNS *discovery* was confirmed to work even across different subnets in testing (a router-level mDNS reflector, evidently), so a same-subnet requirement is less likely to be the blocker than it once seemed — but if discovery genuinely comes up empty, that's still the first thing to check. A different failure mode was hit in testing instead: discovery found the driver via its `.local` mDNS hostname, but the Remote's own follow-up WebSocket connection to that hostname failed (`Connection refused`) — registering the driver again with the plain IP overridden worked. If the auto-discovered entry connects to a `.local` URL and setup won't progress, that's worth checking first.
+
+### Wake-on-LAN (opt-in)
+
+Leave the MAC blank and there is no wake capability and no behaviour change. Enter it (`aa:bb:cc:dd:ee:ff`, any common separator form) and you get:
+
+- **Power On** on the `remote` entity — modelled with the entity's native `on_off`/`toggle` rather than a custom command, so the Remote's physical POWER button can be mapped to it. OFF means "asleep, wakeable"; ON means the agent answered.
+- A **"Wake-on-LAN"** monitoring view reporting what the agent measured: whether the NIC's magic-packet filter is armed *and* whether the kernel keeps power to the device while suspended. Both gates have to be open, and the view names the fix (`ethtool -s <iface> wol g`) when only the first is missing.
+
+The magic packet is built and sent here, not by the agent — the agent is asleep whenever a wake is needed. Each wake attempt fires the packet three times to the limited broadcast, to your configured subnet broadcast if you set one, and to the box's last-known IP (the unicast copy is what gets through networks that drop broadcasts) on UDP/9.
+
+Four things worth knowing before blaming the code when a box won't rise:
+
+- `WAKING` is a real state: after sending, the device probes every poll tick and only claims ON when the agent actually answers. Silence during a wake is expected — the NIC comes back long before the agent can — so it does not abort the wake; only the ~2-minute deadline does, and then the state returns to OFF rather than pretending the box is up.
+- Wake works with the "hardware monitoring" toggle off. The ladder that demotes a silent box runs off the game-list fetch precisely because sensors may not be polled; a monitoring-disabled integration can still see the box die and offer Power On.
+- Whether the box is *asleep* is decided by a TCP probe of the agent's port (`probe.py`), and it can only be that decisive where a closed port **answers** — a RST, or the ICMP "prohibited" a firewall sends — while an absent host stays silent. The test box's firewalld does exactly that (documented in `docs/hardware-notes.md`), which is why the probe counts an immediate `EHOSTUNREACH` as an answer and only treats a *timeout* as "asleep".
+- The failure mode that follows: on a network where a **router**, not the box, rejects closed ports, a sleeping box answers like an awake one. The probe then reports UNAVAILABLE — "Box is on, agent is not answering" — and `can_wake` refuses, because it will not claim a wake on a box it believes is running. WoL is effectively dead on such a network, and there is no honest way to detect around it; the reading is wrong-but-safe rather than a guess. Same-subnet setups (the normal case for WoL anyway) don't hit this.
+- A wake is refused while the agent is answering — you can't wake a box that is on — and the Power On item doesn't even appear unless a MAC is configured.
 
 ## Local dev loop (no Remote needed)
 

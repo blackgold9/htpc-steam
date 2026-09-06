@@ -6,13 +6,14 @@ One port, default **8086** (configurable), single HTTP server — unlike upstrea
 
 ## Endpoints
 
-### `GET /health`
-
 ```json
-{"status": "ok", "version": "0.1.0", "uptime_s": 123.4, "uinput_available": true}
+{"status": "ok", "version": "0.1.0", "uptime_s": 123.4, "uinput_available": true, "wol_arm": false, "wol": {"reported": true, "supported": true, "enabled": false, "supported_flags": "pumbg", "wake_on": "", "interface": "enp9s0", "driver": "r8169", "may_wakeup": true}}
 ```
 
-`uinput_available` lets the integration surface degraded key-injection mode without waiting for a failed `/command` call. Status implemented: Phase 0.
+`uinput_available` lets the integration surface degraded key-injection mode without waiting for a failed `/command` call. Status implemented: Phase 0 for those fields; the `wol` fields below are Phase 4 (unreleased).
+
+The `wol` block is the NIC's Wake-on-LAN state, measured by the agent because it runs as root and an unprivileged `ethtool` cannot see the Wake-on fields at all (verified 2026-09-05: as a plain user, `ethtool <iface>` exits 0 with a full link dump and *neither* `Supports Wake-on:` nor `Wake-on:`). It is **omitted entirely when unreadable** — absent means "unknown", and must not be rendered as "this NIC cannot do Wake-on-LAN". `wol_arm` is the configured preference, reported even when `wol` is absent, so "never asked for WoL" stays distinguishable from "asked and arming failed". Both are also present in `GET /sensors`' `wol` field; `/health` carries them because the integration's wake decision can't depend on hardware monitoring being enabled. Status: Phase 4 (unreleased).
+
 
 ### `GET /status`
 
@@ -23,6 +24,8 @@ Human-readable plain text page, for browser/SSH debugging. Not consumed by the i
 Request: `{"command": "<string>"}`. Response: `200 {"status": "ok"}` or `4xx {"status": "error", "message": "..."}`.
 
 For `power_*` commands, the server responds `200` first and executes the `systemctl`/`loginctl` call ~150-300ms later on a background thread, since the host may go offline before a synchronous response could be sent. Status: Phase 1-2 (command vocabulary), see `docs/command-mapping.md`.
+
+**Wake-on-LAN is deliberately absent from this vocabulary.** There is no `power_on` command: the agent is asleep whenever a wake is needed, so a command-based wake can never be received. The magic packet is sent by the integration instead (`integration/src/uc_intg_steamos/wol.py`). The agent's only WoL role is read-side — reporting arming state, and optionally arming the NIC itself via the `wol_arm` config flag while it is awake.
 
 Optional auth: if `auth_token` is configured (non-empty), requests must carry a matching `X-UC-Token` header or receive `401`. Off by default. See "Auth posture" below for what that does and does not buy you.
 
@@ -39,11 +42,12 @@ Optional auth: if `auth_token` is configured (non-empty), requests must carry a 
   "network": {"up_kbps": 0, "down_kbps": 0},
   "motherboard": {"temp_avg_c": null, "temp_max_c": null},
   "fans": [{"label": "", "rpm": 0}],
-  "battery": {"present": false, "percent": null, "charging": null, "power_w": null}
+  "battery": {"present": false, "percent": null, "charging": null, "power_w": null},
+  "wol": {"reported": true, "supported": true, "enabled": false, "supported_flags": "pumbg", "wake_on": "", "interface": "enp9s0", "driver": "r8169", "may_wakeup": true}
 }
 ```
 
-Unavailable sensors are `null`, not `0`, so the integration can mark an entity unavailable instead of showing a false zero. Temperature is Celsius on the wire; unit conversion (°C/°F) is a display-layer concern in the integration. `battery` has no upstream (Windows) equivalent — desktop HTPCs have no battery. Status: Phase 3.
+Unavailable sensors are `null`, not `0`, so the integration can mark an entity unavailable instead of showing a false zero. Temperature is Celsius on the wire; unit conversion (°C/°F) is a display-layer concern in the integration. `battery` has no upstream (Windows) equivalent — desktop HTPCs have no battery. `wol` follows the opposite rule from the numeric sensors: it is **omitted**, not nulled, when it can't be read, because a NIC whose state couldn't be queried and a NIC that can't do Wake-on-LAN need opposite advice. Its absence must never be rendered as "unsupported". Status: Phase 3 for the sensor blocks; the `wol` field is Phase 4 (unreleased) and older agents simply don't send it.
 
 ### `GET /games`
 

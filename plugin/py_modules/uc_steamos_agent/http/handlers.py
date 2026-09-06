@@ -32,13 +32,27 @@ def handle_command(dispatcher: Dispatcher, command: str) -> tuple[int, str, byte
     return 200, "application/json", json.dumps({"status": "ok"}).encode("utf-8")
 
 
-def handle_health(config: AgentConfig, start_time: float, uinput_available: bool) -> tuple[int, str, bytes]:
+def handle_health(
+    config: AgentConfig,
+    start_time: float,
+    uinput_available: bool,
+    wol_status: dict | None = None,
+) -> tuple[int, str, bytes]:
     payload = {
         "status": "ok",
         "version": config.version,
         "uptime_s": round(time.monotonic() - start_time, 1),
         "uinput_available": uinput_available,
+        # The arming preference is reported unconditionally so the integration
+        # can tell "user never asked for WoL" from "asked and it failed".
+        "wol_arm": config.wol_arm,
     }
+    if wol_status:
+        # Reported on /health too, not only /sensors, so a caller that hasn't
+        # enabled sensor polling (the integration's enable_hardware_monitoring
+        # off switch, or the QAM panel) can still see whether WoL is armed.
+        # Omitted when unreadable — absent means "unknown", not "unsupported".
+        payload["wol"] = wol_status
     return 200, "application/json", json.dumps(payload).encode("utf-8")
 
 

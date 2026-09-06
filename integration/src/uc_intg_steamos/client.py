@@ -49,6 +49,15 @@ class SystemData:
         self.battery_percent: float | None = None
         self.battery_charging: bool | None = None
         self.battery_power: float | None = None
+        # Wake-on-LAN arming state, as reported by the agent's root shell.
+        # wol_present is False when the agent predates the wol block, which is
+        # how a new integration must treat an old agent: no view data, no claims.
+        self.wol_present: bool = False
+        self.wol_interface: str = ""
+        self.wol_driver: str = ""
+        self.wol_supported: bool = False
+        self.wol_enabled: bool = False
+        self.wol_may_wakeup: bool = False
         self.last_updated: float = 0.0
 
 
@@ -96,6 +105,15 @@ def parse_sensor_data(raw: dict[str, Any]) -> SystemData:
     sd.battery_percent = battery.get("percent")
     sd.battery_charging = battery.get("charging")
     sd.battery_power = battery.get("power_w")
+
+    wol = raw.get("wol")
+    if isinstance(wol, dict):
+        sd.wol_present = True
+        sd.wol_interface = wol.get("interface") or ""
+        sd.wol_driver = wol.get("driver") or ""
+        sd.wol_supported = bool(wol.get("supported"))
+        sd.wol_enabled = bool(wol.get("enabled"))
+        sd.wol_may_wakeup = bool(wol.get("may_wakeup"))
 
     return sd
 
@@ -146,7 +164,14 @@ class SteamOSClient:
             return {"X-UC-Token": self._config.auth_token}
         return {}
 
-    async def connect(self) -> bool:
+    def ensure_session(self) -> aiohttp.ClientSession:
+        """Create the long-lived session used by the update_* methods.
+
+        Split out from connect() because establish_connection() needs the
+        session to exist *before* deciding whether the agent is healthy:
+        update_games()/update_system_data() silently return False with no
+        session, which would read as "agent is down" on a perfectly live box.
+        """
         if not self._session:
             connector = aiohttp.TCPConnector(limit=3)
             self._session = aiohttp.ClientSession(
@@ -154,9 +179,7 @@ class SteamOSClient:
                 connector=connector,
                 headers=self._headers(),
             )
-        if self._config.enable_hardware_monitoring:
-            return await self.update_system_data()
-        return await self.test_agent()
+        return self._session
 
     async def close(self) -> None:
         if self._session:
