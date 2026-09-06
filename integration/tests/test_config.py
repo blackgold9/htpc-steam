@@ -1,6 +1,11 @@
 from uc_intg_steamos.config import SteamOSConfig
 
 
+def test_wol_enabled_reflects_mac_address():
+    assert SteamOSConfig(mac_address="").wol_enabled is False
+    assert SteamOSConfig(mac_address="AA:BB:CC:DD:EE:FF").wol_enabled is True
+
+
 def test_convert_temperature_celsius_passthrough():
     config = SteamOSConfig(temperature_unit="celsius")
     assert config.convert_temperature(100.0) == 100.0

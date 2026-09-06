@@ -11,13 +11,13 @@ See [`docs/protocol.md`](docs/protocol.md) for the wire protocol both sides impl
 
 ## Status
 
-Working end-to-end on real hardware. Both halves are built, unit-tested (135 + 21 tests), and verified live against a Bazzite/Gamescope box and a physical UC Remote 3 — see `docs/hardware-notes.md` for the raw findings.
+Working end-to-end on real hardware. Both halves are built, unit-tested (135 + 23 tests), and verified live against a Bazzite/Gamescope box and a physical UC Remote 3 — see `docs/hardware-notes.md` for the raw findings.
 
 Confirmed on real hardware: uinput navigation of Big Picture, volume via PipeWire, native sensor collection, Steam URI shortcuts, the three-tier game-exit escalation (`steam_overlay` / `alt_f4` / `force_quit_game`), launching a game by appid from the recently-played list, and the full Remote pairing/setup flow with all entities coming up `ACTIVE`/`CONNECTED`.
 
 Not yet verified: the power commands (`power_sleep`/`hibernate`/`shutdown`/`restart`) are implemented and unit-tested but never fired live, since doing so takes the test box down; and how the Remote's on-device UI actually renders the custom pages, which needs a human to add the entities to a page first.
 
-Deliberately out of scope: Wake-on-LAN (a separate UC integration owns it), virtual gamepad input, and general-purpose app/URL launching — see `docs/command-mapping.md`'s "Deliberately not implemented" section for the reasoning on each.
+Deliberately out of scope: virtual gamepad input and general-purpose app/URL launching — see `docs/command-mapping.md`'s "Deliberately not implemented" section for the reasoning on each. Wake-on-LAN is implemented on this branch in its original upstream form (client-side `wakeonlan` magic packet, gated on a configured `mac_address`), inherited from upstream's Windows integration and **never verified live on SteamOS** — firing it needs the box powered off first.
 
 ## Security
 

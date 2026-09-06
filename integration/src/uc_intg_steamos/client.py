@@ -14,6 +14,7 @@ import logging
 from typing import Any
 
 import aiohttp
+from wakeonlan import send_magic_packet
 
 from uc_intg_steamos.config import SteamOSConfig
 from uc_intg_steamos.const import AGENT_PORT
@@ -264,3 +265,14 @@ class SteamOSClient:
         except (asyncio.TimeoutError, aiohttp.ClientError):
             _LOG.info("Power command '%s' sent (host going offline as expected)", command)
             return True
+
+    async def power_on_wol(self) -> bool:
+        if not self._config.wol_enabled:
+            return False
+        try:
+            send_magic_packet(self._config.mac_address)
+            _LOG.info("WoL packet sent to %s", self._config.mac_address)
+            return True
+        except Exception as err:
+            _LOG.error("WoL failed: %s", err)
+            return False

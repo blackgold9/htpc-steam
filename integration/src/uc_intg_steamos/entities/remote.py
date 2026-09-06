@@ -25,6 +25,7 @@ from uc_intg_steamos.device import SteamOSDevice
 _LOG = logging.getLogger(__name__)
 
 COMMAND_MAP = {
+    "POWER_ON": "power_on",
     "POWER_OFF": "power_shutdown",
 }
 
@@ -50,13 +51,16 @@ class SteamOSRemote(RemoteEntity):
             "power_sleep", "power_hibernate", "power_shutdown", "power_restart",
         ]
 
+        if device_config.wol_enabled:
+            simple_commands.insert(0, "POWER_ON")
+
         pages = [
             _create_navigation_page(),
             _create_volume_page(),
             _create_gamescope_page(),
             _create_game_session_page(),
             _create_function_keys_page(),
-            _create_power_page(),
+            _create_power_page(device_config.wol_enabled),
         ]
 
         super().__init__(
@@ -96,6 +100,8 @@ class SteamOSRemote(RemoteEntity):
         return StatusCodes.BAD_REQUEST
 
     async def _execute_command(self, command: str) -> bool:
+        if command == "POWER_ON" or command == "power_on":
+            return await self._device.power_on_wol()
         actual = COMMAND_MAP.get(command, command)
         return await self._device.send_command(actual)
 
@@ -188,15 +194,21 @@ def _create_function_keys_page() -> UiPage:
     return page
 
 
-def _create_power_page() -> UiPage:
-    """No PowerOn button: Wake-on-LAN is out of scope here (a separate,
-    existing UC integration handles waking the box) — see
-    docs/command-mapping.md."""
+def _create_power_page(wol_enabled: bool) -> UiPage:
     page = UiPage(page_id="power", name="Power & System")
-    page.items.extend([
-        create_ui_text("Sleep", 0, 0, cmd="power_sleep"),
-        create_ui_text("Hibernate", 1, 0, cmd="power_hibernate"),
-        create_ui_text("PowerOff", 2, 0, cmd="power_shutdown"),
-        create_ui_text("Restart", 3, 0, cmd="power_restart"),
-    ])
+    if wol_enabled:
+        page.items.extend([
+            create_ui_text("PowerOn", 0, 0, cmd="POWER_ON"),
+            create_ui_text("Sleep", 1, 0, cmd="power_sleep"),
+            create_ui_text("Hibernate", 2, 0, cmd="power_hibernate"),
+            create_ui_text("PowerOff", 3, 0, cmd="power_shutdown"),
+            create_ui_text("Restart", 0, 1, cmd="power_restart"),
+        ])
+    else:
+        page.items.extend([
+            create_ui_text("Sleep", 0, 0, cmd="power_sleep"),
+            create_ui_text("Hibernate", 1, 0, cmd="power_hibernate"),
+            create_ui_text("PowerOff", 2, 0, cmd="power_shutdown"),
+            create_ui_text("Restart", 3, 0, cmd="power_restart"),
+        ])
     return page

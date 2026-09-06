@@ -22,6 +22,7 @@ async def test_driver_and_all_entities_construct_without_error():
         host="192.168.6.193",
         enable_hardware_monitoring=True,
         temperature_unit="celsius",
+        mac_address="",
         auth_token="",
     )
     device = SteamOSDevice(config, driver=driver)
@@ -39,3 +40,13 @@ async def test_driver_and_all_entities_construct_without_error():
 
     sensors = create_sensors(config, device)
     assert len(sensors) == 11
+
+
+async def test_entities_construct_with_wol_enabled():
+    driver = SteamOSDriver()
+    config = SteamOSConfig(
+        identifier="steamos_wol", name="WoL Test", host="10.0.0.5", mac_address="AA:BB:CC:DD:EE:FF"
+    )
+    device = SteamOSDevice(config, driver=driver)
+    remote = SteamOSRemote(config, device)
+    assert remote.id == "remote.steamos_wol"

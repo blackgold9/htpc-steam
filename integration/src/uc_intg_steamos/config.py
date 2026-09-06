@@ -14,7 +14,12 @@ class SteamOSConfig:
     host: str = ""
     enable_hardware_monitoring: bool = True
     temperature_unit: str = "celsius"
+    mac_address: str = ""
     auth_token: str = ""
+
+    @property
+    def wol_enabled(self) -> bool:
+        return bool(self.mac_address)
 
     def convert_temperature(self, celsius: float) -> float:
         if self.temperature_unit == "fahrenheit":
