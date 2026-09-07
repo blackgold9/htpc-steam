@@ -10,6 +10,7 @@ from typing import Any, Callable
 from ucapi import sensor
 from ucapi_framework import SensorEntity
 
+from uc_intg_steamos.config import SteamOSConfig
 from uc_intg_steamos.device import STATE_ON
 
 _LOG = logging.getLogger(__name__)
