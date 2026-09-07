@@ -19,6 +19,11 @@ class AgentConfig:
     host: str = DEFAULT_HOST
     port: int = DEFAULT_PORT
     auth_token: str = ""
+    # Opt-in: re-apply `ethtool -s <iface> wol g` whenever the plugin starts.
+    # Off by default because it changes a NIC-wide power setting; see
+    # commands/wol.py for why re-applying at start is the only thing that
+    # survives a driver reload.
+    wol_arm: bool = False
 
 
 def load_config(settings_dir: str, version: str) -> AgentConfig:
@@ -33,6 +38,7 @@ def load_config(settings_dir: str, version: str) -> AgentConfig:
             config.host = data.get("host", config.host)
             config.port = data.get("port", config.port)
             config.auth_token = data.get("auth_token", config.auth_token)
+            config.wol_arm = bool(data.get("wol_arm", config.wol_arm))
         except (json.JSONDecodeError, OSError):
             pass
     else:
@@ -43,7 +49,12 @@ def load_config(settings_dir: str, version: str) -> AgentConfig:
 
 def save_config(settings_dir: str, config: AgentConfig) -> None:
     config_path = os.path.join(settings_dir, "config.json")
-    payload = {"host": config.host, "port": config.port, "auth_token": config.auth_token}
+    payload = {
+        "host": config.host,
+        "port": config.port,
+        "auth_token": config.auth_token,
+        "wol_arm": config.wol_arm,
+    }
     os.makedirs(settings_dir, exist_ok=True)
     with open(config_path, "w", encoding="utf-8") as f:
         json.dump(payload, f, indent=2)

@@ -10,6 +10,7 @@ from typing import Any
 from ucapi import RequestUserInput
 from ucapi_framework import BaseSetupFlow
 
+from uc_intg_steamos import wol
 from uc_intg_steamos.client import SteamOSClient
 from uc_intg_steamos.config import SteamOSConfig
 
@@ -64,6 +65,16 @@ class SteamOSSetupFlow(BaseSetupFlow[SteamOSConfig]):
                     "label": {"en": "Agent Auth Token (Optional)"},
                     "field": {"text": {"value": ""}},
                 },
+                {
+                    "id": "mac_address",
+                    "label": {"en": "MAC Address (Optional — enables Wake-on-LAN)"},
+                    "field": {"text": {"value": "", "hint": {"en": "aa:bb:cc:dd:ee:ff"}}},
+                },
+                {
+                    "id": "broadcast_address",
+                    "label": {"en": "WoL Broadcast Address (Optional)"},
+                    "field": {"text": {"value": "255.255.255.255", "hint": {"en": "use the subnet broadcast if 255.255.255.255 is dropped"}}},
+                },
             ],
         )
 
@@ -76,6 +87,17 @@ class SteamOSSetupFlow(BaseSetupFlow[SteamOSConfig]):
         enable_hw = input_values.get("enable_hardware_monitoring", "enabled") == "enabled"
         temp_unit = input_values.get("temperature_unit", "celsius")
         auth_token = input_values.get("auth_token", "").strip()
+        mac_address = input_values.get("mac_address", "").strip()
+        broadcast_address = input_values.get("broadcast_address", "").strip() or "255.255.255.255"
+
+        # Reject a malformed MAC here rather than at the first wake attempt,
+        # when the box is already off and the only feedback would be a log
+        # line. Same spirit as the 401-on-wrong-token check below.
+        if mac_address and not wol.validate_mac(mac_address):
+            raise ValueError(
+                f"'{mac_address}' is not a valid MAC address. Use the form aa:bb:cc:dd:ee:ff "
+                "(shown by `cat /sys/class/net/<iface>/address` on the HTPC), or leave it blank."
+            )
 
         config = SteamOSConfig(
             identifier=f"steamos_{host.replace('.', '_')}",
@@ -84,6 +106,8 @@ class SteamOSSetupFlow(BaseSetupFlow[SteamOSConfig]):
             enable_hardware_monitoring=enable_hw,
             temperature_unit=temp_unit,
             auth_token=auth_token,
+            mac_address=wol.normalize_mac(mac_address) if mac_address else "",
+            broadcast_address=broadcast_address,
         )
 
         client = SteamOSClient(config)
@@ -111,5 +135,11 @@ class SteamOSSetupFlow(BaseSetupFlow[SteamOSConfig]):
         finally:
             await client.close()
 
-        _LOG.info("Setup complete: %s at %s (hw_monitoring=%s)", name, host, enable_hw)
+        _LOG.info(
+            "Setup complete: %s at %s (hw_monitoring=%s, wol=%s)",
+            name,
+            host,
+            enable_hw,
+            config.mac_address or "disabled",
+        )
         return config

@@ -11,6 +11,7 @@ from ucapi import sensor
 from ucapi_framework import SensorEntity
 
 from uc_intg_steamos.config import SteamOSConfig
+from uc_intg_steamos.device import STATE_ON
 
 _LOG = logging.getLogger(__name__)
 
@@ -43,7 +44,9 @@ class SteamOSSensor(SensorEntity):
         self.subscribe_to_device(device)
 
     async def sync_state(self) -> None:
-        if self._device.state == "UNAVAILABLE":
+        # Only ON has fresh readings; OFF/WAKING/UNAVAILABLE all mean the last
+        # values we hold are stale, and a stale number is worse than N/A.
+        if self._device.state != STATE_ON:
             self.update({sensor.Attributes.STATE: sensor.States.UNAVAILABLE})
             return
         value = self._value_getter(self._device)

@@ -13,6 +13,7 @@ import decky
 from uc_steamos_agent.commands import launch, media, user_session
 from uc_steamos_agent.commands.dispatcher import Dispatcher
 from uc_steamos_agent.commands.uinput_probe import uinput_writable
+from uc_steamos_agent.commands.wol import WakeOnLanMonitor
 from uc_steamos_agent.config import load_config
 from uc_steamos_agent.games import library
 from uc_steamos_agent.http.server import build_server
@@ -30,20 +31,31 @@ class Plugin:
             media_execute=self._bind_env(media.execute, session_env),
             launch_steam_uri_execute=self._bind_env(launch.launch_steam_uri, session_env),
         )
-        self.sensors = SensorCollector()
+        self.wol = WakeOnLanMonitor(arm=self.config.wol_arm)
+        # Arming spawns ethtool, and the flag has to be back before the box can
+        # be slept, so it happens off the plugin's startup task: Decky's start
+        # path must not block on a subprocess.
+        threading.Thread(target=self.wol.start, daemon=True).start()
+        self.sensors = SensorCollector(wol_fn=self.wol.status)
         self.sensors.start()
         steam_root = self._resolve_steam_root()
         games_fn = library.RecentGamesCache(steam_root).games if steam_root else None
         self.server = build_server(
-            self.config, uinput_writable, self.dispatcher, self.sensors.snapshot, games_fn=games_fn
+            self.config,
+            uinput_writable,
+            self.dispatcher,
+            self.sensors.snapshot,
+            games_fn=games_fn,
+            wol_fn=self.wol.status,
         )
         self._server_thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self._server_thread.start()
         decky.logger.info(
-            "uc-steamos-agent listening on %s:%s (uinput_available=%s)",
+            "uc-steamos-agent listening on %s:%s (uinput_available=%s, wol_arm=%s)",
             self.config.host,
             self.config.port,
             uinput_writable(),
+            self.config.wol_arm,
         )
 
     # Called first during unload; the plugin is stopped but not removed.
@@ -104,4 +116,6 @@ class Plugin:
             "host": self.config.host,
             "port": self.config.port,
             "uinput_available": uinput_writable(),
+            "wol_arm": self.config.wol_arm,
+            "wol": self.wol.status(),
         }

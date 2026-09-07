@@ -97,3 +97,52 @@ async def test_monitoring_disabled_skips_sensor_test(flow, monkeypatch):
 
     config = await flow.query_device({"host": "203.0.113.10", "enable_hardware_monitoring": "disabled"})
     assert config.enable_hardware_monitoring is False
+
+
+async def test_bad_mac_is_rejected_before_touching_the_agent(flow, monkeypatch):
+    """A malformed MAC must fail at setup, not at the first wake weeks later
+    when the box is already off and the only feedback is a log line. It also
+    must fail *before* the network call, so the error the user sees names the
+    MAC rather than the host."""
+
+    def fail_if_called(self):
+        raise AssertionError("a malformed MAC should never reach the agent")
+
+    monkeypatch.setattr(SteamOSClient, "agent_status", fail_if_called)
+
+    with pytest.raises(ValueError, match="not a valid MAC address"):
+        await flow.query_device({"host": "203.0.113.10", "mac_address": "aa:bb:cc:dd:ee"})
+
+
+async def test_mac_is_normalised_whatever_separator_was_typed(flow, monkeypatch):
+    """The stored form is what builds the magic packet, so a separator leaking
+    into it would silently produce a packet that wakes nothing."""
+
+    async def fake_agent_status(self):
+        return 200
+
+    async def fake_test_sensors(self):
+        return {"success": True, "sensor_count": 9}
+
+    monkeypatch.setattr(SteamOSClient, "agent_status", fake_agent_status)
+    monkeypatch.setattr(SteamOSClient, "test_sensors", fake_test_sensors)
+
+    for typed in ("AA:BB:CC:DD:EE:FF", "aa-bb-cc-dd-ee-ff", "aa.bb.cc.dd.ee.ff", "aabbccddeeff"):
+        config = await flow.query_device({"host": "203.0.113.10", "mac_address": typed})
+        assert config.mac_address == "aabbccddeeff", typed
+
+
+async def test_blank_mac_leaves_wake_disabled(flow, monkeypatch):
+    async def fake_agent_status(self):
+        return 200
+
+    monkeypatch.setattr(SteamOSClient, "agent_status", fake_agent_status)
+
+    config = await flow.query_device({
+        "host": "203.0.113.10",
+        "mac_address": "   ",
+        "enable_hardware_monitoring": "disabled",
+    })
+
+    assert config.mac_address == ""
+    assert config.broadcast_address == "255.255.255.255"

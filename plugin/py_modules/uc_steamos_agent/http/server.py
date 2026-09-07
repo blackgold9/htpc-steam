@@ -29,6 +29,7 @@ def build_server(
     dispatcher: Dispatcher,
     sensors_fn: Callable[[], dict] | None = None,
     games_fn: Callable[[], list[dict]] | None = None,
+    wol_fn: Callable[[], dict | None] | None = None,
 ) -> ThreadingHTTPServer:
     start_time = time.monotonic()
 
@@ -61,7 +62,9 @@ def build_server(
                 self._write(*handlers.handle_unauthorized())
                 return
             if self.path == "/health":
-                status, ctype, body = handlers.handle_health(config, start_time, uinput_available_fn())
+                status, ctype, body = handlers.handle_health(
+                    config, start_time, uinput_available_fn(), wol_fn() if wol_fn else None
+                )
             elif self.path == "/status":
                 status, ctype, body = handlers.handle_status(config, start_time)
             elif self.path == "/sensors" and sensors_fn is not None:
