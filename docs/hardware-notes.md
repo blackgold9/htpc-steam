@@ -30,7 +30,51 @@ Things that looked promising but didn't work here, for reference: `import -windo
 
 ## Devices tested
 
-### "bazzite" box — Bazzite 44.20260820.0 (Kinoite/bazzite-deck image), kernel 7.2.0-ogc4.1.fc44.x86_64
+### "bazzite" — the current test box: Bazzite 43.20260415.0 (Kinoite), kernel 6.17.7-ba29.fc43.x86_64
+
+Reached over SSH as `stephen@192.168.6.196` (key auth; `user@` and `deck@` are not the account names here). Re-surveyed 2026-09-05. **This is a different machine from the 2026-08-22/23 dump recorded further below** — that one was reached at `192.168.6.193` with a Ryzen 9 8945HS APU on `enp151s0`; this one is a desktop-socket box. `192.168.6.193` is not reachable from the dev machine anymore, so the older section can no longer be re-verified and is kept as a historical record rather than being edited into agreement.
+
+Facts confirmed live on this box:
+
+```
+CPU     AMD Ryzen 5 7600X3D 6-Core Processor          (hwmon: k10temp)
+GPU     Navi 48 [Radeon RX 9070/9070 XT/9070 GRE]     1002:7550 -> card1
+iGPU    Raphael [AMD/ATI]                             1002:164e -> card0
+Board   Gigabyte X870 GAMING WIFI6, BIOS F13
+NIC     enp9s0, driver r8169, MAC 30:56:0f:b6:7a:9e (default route)
+        wlan0 present and DOWN
+hwmons  acpitz, nvme, amdgpu, amdgpu, k10temp, gigabyte_wmi, zenergy, r8169_0_900:00
+suspend freeze mem disk;  mem_sleep: s2idle [deep]  (deep is selected)
+resume  /sys/power/resume = 0:0  (hibernate image device NOT configured)
+        => suspend works and is WoL-recoverable; hibernate is effectively
+           "suspend-to-disk unconfigured" and must not be offered as a
+           WoL-round-trip path on this box without setting up a resume= device.
+firewall firewalld active — and it changes what the probe can conclude (below)
+GET /sensors (agent 0.1.0): cpu temp 46.4C, gpu temp 57C, mem 3.7/14.7 GiB,
+        storage 340.5/951.3 GiB @ 47.85C, cpu_power null, fans [], battery absent.
+```
+
+Two sensor conclusions from the earlier box survived the hardware change unchanged: CPU power has no hwmon here either (still `null`), and there are still no `fan*_input` nodes, so `fans: []` remains a normal outcome rather than a fault. Note `gigabyte_wmi` and `zenergy` hwmons now exist and are unread by any sub-collector — potential future fan/pump sources on Gigabyte boards, deliberately not guessed at.
+
+### Wake-on-LAN ground truth (this box, 2026-09-05)
+
+The part that matters for the WoL feature, because three of its assumptions came back wrong from the lab:
+
+- **Both kernel gates are open.** `/sys/class/net/enp9s0/device/power/wakeup` reads `enabled`, and `deep` (not `s2idle`) is the selected suspend mode — so an armed r8169 keeps enough power to see a magic packet. `ethtool -s enp9s0 wol g` is the only thing missing.
+- **Unprivileged `ethtool` cannot see Wake-on at all.** `ethtool enp9s0` as the SSH user prints a *complete link dump* (`Speed: 1000Mb/s`, `Link detected: yes`), exits **0**, and contains neither `Supports Wake-on:` nor `Wake-on:` — with `netlink error: Operation not permitted` on stderr. A parser that reads absent fields as "unsupported" would tell the user this NIC can't do Wake-on-LAN. `commands/wol.py` therefore reports `reported: false` → `None` → *unknown*, and never conflates "couldn't read" with "can't do it". Root (i.e. the agent itself, via `wol_arm`) is what makes the fields appear.
+- **No passwordless sudo** for the SSH user here, so arming could only be confirmed through the agent's own root context, not from the dev shell.
+- **The OS already ships the mechanism, disabled:** `force-wol.service` (`/usr/lib/systemd/system/`, `Type=oneshot`, `ExecStart=/usr/libexec/force-wol`, `WantedBy=network-online.target`) is `disabled/disabled`. It is exactly the "re-arm on every boot" job the agent's `wol_arm` option does. Either is sufficient; both are idempotent. Documented so a user with the systemd unit enabled doesn't conclude the agent's flag is broken.
+- **firewalld rejects closed ports instead of dropping them.** `192.168.6.196:8086` connects; `:9` and `:7` fail in ~1ms with `EHOSTUNREACH`; `:12345`/`:8087` fail with `ECONNREFUSED`; a genuinely absent host on the same LAN (`192.168.6.201`) produces a *timeout*. So "silence = asleep" only holds for timeouts, and the probe must treat `EHOSTUNREACH` as an answer. Consequence recorded in `integration/src/uc_intg_steamos/probe.py`: only the agent's own port is probed, since a firewalled port can't discriminate at all.
+- **BIOS-side settings could not be inspected, and are not claimed.** Wake-on-LAN on this board (Gigabyte X870 GAMING WIFI6, BIOS F13) also depends on firmware: the NIC wake option and, critically, whether the board's standby power rails stay live — an enabled ErP/EuP setting or "Deep Sleep" mode kills the NIC's 5 V standby and no amount of `ethtool wol g` survives it. There is no Linux-readable surface for any of that (nothing in sysfs or `ethtool` reports it), so it stays an unverified prerequisite that only a power-off test can settle. `wol_supported`/`wol_enabled`/`may_wakeup` being all true says the OS half is ready; it says nothing about the firmware half.
+
+Persistence, since it decides whether a wake still works next week: `Wake-on: g` is RAM state on r8169 and most other drivers. It survives suspend (which is the point — suspend is what keeps the NIC powered) but is cleared by a driver reload, a kernel update, NetworkManager re-creating the link, and by a full power-off. So a box that is `power_sleep`'d keeps its arming, a box that is `power_shutdown`'d does not unless something re-arms it on boot: that is the job of `wol_arm` in the agent, or of Bazzite's `force-wol.service`, or of a oneshot unit the user writes. Firmware is the only setting durable across a power cut.
+
+Not yet verified, and deliberately not claimed anywhere: that a magic packet actually brings this box back. That requires powering it off, which takes the test box (and the agent reporting it) down; it is the one remaining step and needs the box's MAC armed first.
+
+
+### Previous test box (2026-08-22/23) — Bazzite 44.20260820.0 (Kinoite/bazzite-deck image), kernel 7.2.0-ogc4.1.fc44.x86_64
+
+**Historical.** Reachable at the time via `192.168.6.193`, which no longer answers; kept because it is the source of record for the sensor-mapping decisions in `plugin/py_modules/uc_steamos_agent/sensors/` and for the `enp151s0` fixture in `plugin/tests/test_sensors_network.py`, and none of the findings below were contradicted by the newer box above. Its interface and CPU names are *not* this box's.
 
 **Correction (Phase 3):** `GET /sensors` later identified the CPU as an **AMD Ryzen 9 8945HS w/ Radeon 780M Graphics** — a mobile/handheld-class APU (used in devices like the ROG Ally X, GPD Win Max 2, and similar compact PCs), not a desktop-socket chip as originally assumed below. The Gamescope launch args' `--prefer-output *,eDP-1` (an embedded-display connector, not DP/HDMI) was a hint missed at the time. Likely a mini-PC/SFF or laptop-class device with a built-in or LCD panel, not a full desktop tower. Doesn't change any finding below, but corrects the framing — this is closer to the plan's actual target hardware class than "desktop" suggested.
 

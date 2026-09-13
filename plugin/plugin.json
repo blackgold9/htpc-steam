@@ -1,7 +1,7 @@
 {
   "name": "UC SteamOS Agent",
   "author": "Stephen Vanterpool",
-  "flags": ["_root"],
+  "flags": ["root"],
   "api_version": 1,
   "publish": {
     "tags": ["remote-control", "system-monitor", "unfolded-circle"],

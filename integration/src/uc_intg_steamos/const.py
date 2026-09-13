@@ -18,4 +18,7 @@ MONITORING_VIEWS = [
     "Fan Monitoring",
     "Power Consumption",
     "Battery",
+    # WoL arming state, straight from the agent (root can read what the user
+    # can't: `ethtool` refuses Wake-on info to unprivileged callers).
+    "Wake-on-LAN",
 ]

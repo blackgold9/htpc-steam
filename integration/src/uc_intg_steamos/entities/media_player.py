@@ -18,7 +18,7 @@ from ucapi_framework import MediaPlayerEntity
 
 from uc_intg_steamos.config import SteamOSConfig
 from uc_intg_steamos.const import MONITORING_VIEWS
-from uc_intg_steamos.device import SteamOSDevice
+from uc_intg_steamos.device import STATE_OFF, STATE_UNAVAILABLE, STATE_WAKING, SteamOSDevice
 
 _LOG = logging.getLogger(__name__)
 
@@ -33,6 +33,8 @@ SOURCE_ICONS = {
     "Fan Monitoring": "fan_monitoring.png",
     "Power Consumption": "power_consumption.png",
     "Battery": "battery.png",
+    # Reuses the power icon; there's no dedicated WoL glyph in the icon set.
+    "Wake-on-LAN": "power_consumption.png",
 }
 
 FEATURES = [
@@ -73,11 +75,31 @@ class SteamOSMediaPlayer(MediaPlayerEntity):
         self.subscribe_to_device(device)
 
     async def sync_state(self) -> None:
-        if self._device.state == "UNAVAILABLE":
+        state = self._device.state
+        if state in (STATE_OFF, STATE_WAKING):
+            # Sensors are meaningless when the box isn't answering, so the
+            # dashboard's job here is to say so and point at the wake path.
+            wake_hint = (
+                "Wake with the Power On button"
+                if self._device.wol_available
+                else "No MAC configured — power it on manually"
+            )
+            self.update({
+                media_player.Attributes.STATE: media_player.States.STANDBY,
+                media_player.Attributes.MEDIA_TITLE: "Box is off",
+                media_player.Attributes.MEDIA_ARTIST: (
+                    "Waking — waiting for it to come back" if state == STATE_WAKING else wake_hint
+                ),
+                media_player.Attributes.MEDIA_ALBUM: "",
+            })
+            return
+
+        if state == STATE_UNAVAILABLE:
+            # Awake but refusing the agent port: Decky/plugin problem, not power.
             self.update({
                 media_player.Attributes.STATE: media_player.States.UNAVAILABLE,
-                media_player.Attributes.MEDIA_TITLE: "Connection Lost",
-                media_player.Attributes.MEDIA_ARTIST: "Attempting reconnection...",
+                media_player.Attributes.MEDIA_TITLE: "Box is on, agent is not answering",
+                media_player.Attributes.MEDIA_ARTIST: "Check Decky and the SteamOS Agent plugin",
                 media_player.Attributes.MEDIA_ALBUM: "",
             })
             return
@@ -213,6 +235,28 @@ class SteamOSMediaPlayer(MediaPlayerEntity):
                     media_player.Attributes.MEDIA_ARTIST: "Desktop/no battery detected",
                     media_player.Attributes.MEDIA_ALBUM: "",
                 }
+            case "Wake-on-LAN":
+                # Three answers, and they must not collapse into each other:
+                # the agent couldn't read it (the live box, where unprivileged
+                # ethtool reports nothing about wake), the NIC can't do it, or
+                # it can and isn't armed. Only the last one is a `sudo` away.
+                if not data.wol_present:
+                    return {
+                        media_player.Attributes.MEDIA_TITLE: "Wake-on-LAN",
+                        media_player.Attributes.MEDIA_ARTIST: "Could not read NIC state",
+                        media_player.Attributes.MEDIA_ALBUM: "Old agent version, or ethtool reported no Wake-on info",
+                    }
+                if data.wol_enabled:
+                    armed = "armed" if data.wol_may_wakeup else "filter armed, device is no wakeup source"
+                elif data.wol_supported:
+                    armed = f"NOT armed — sudo ethtool -s {data.wol_interface} wol g"
+                else:
+                    armed = "NIC does not advertise Wake-on-LAN"
+                return {
+                    media_player.Attributes.MEDIA_TITLE: f"{data.wol_interface}: {armed}",
+                    media_player.Attributes.MEDIA_ARTIST: f"driver: {data.wol_driver or 'unknown'}",
+                    media_player.Attributes.MEDIA_ALBUM: f"wake via port {cfg.wol_port} to {cfg.broadcast_address}",
+                }
             case _:
                 return {
                     media_player.Attributes.MEDIA_TITLE: view,
@@ -223,7 +267,9 @@ class SteamOSMediaPlayer(MediaPlayerEntity):
     async def _handle_command(self, entity: Any, cmd_id: str, params: dict[str, Any] | None) -> StatusCodes:
         match cmd_id:
             case media_player.Commands.ON:
-                pass
+                # Wake, not an agent command: the agent can't be reached from
+                # the very state this button exists for.
+                await self._device.wake_on_lan()
             case media_player.Commands.OFF:
                 await self._device.send_command("power_sleep")
             case media_player.Commands.SELECT_SOURCE:

@@ -49,6 +49,16 @@ class SystemData:
         self.battery_percent: float | None = None
         self.battery_charging: bool | None = None
         self.battery_power: float | None = None
+        # Wake-on-LAN arming state, as reported by the agent's root shell.
+        # wol_present is False when the agent predates the wol block, which is
+        # how a new integration must treat an old agent: no view data, no claims.
+        self.wol_present: bool = False
+        self.wol_interface: str = ""
+        self.wol_driver: str = ""
+        self.wol_supported: bool = False
+        self.wol_enabled: bool = False
+        self.wol_may_wakeup: bool = False
+        self.wol_mac_address: str = ""
         self.last_updated: float = 0.0
 
 
@@ -96,6 +106,16 @@ def parse_sensor_data(raw: dict[str, Any]) -> SystemData:
     sd.battery_percent = battery.get("percent")
     sd.battery_charging = battery.get("charging")
     sd.battery_power = battery.get("power_w")
+
+    wol = raw.get("wol")
+    if isinstance(wol, dict):
+        sd.wol_present = True
+        sd.wol_interface = wol.get("interface") or ""
+        sd.wol_driver = wol.get("driver") or ""
+        sd.wol_supported = bool(wol.get("supported"))
+        sd.wol_enabled = bool(wol.get("enabled"))
+        sd.wol_may_wakeup = bool(wol.get("may_wakeup"))
+        sd.wol_mac_address = wol.get("mac_address") or ""
 
     return sd
 
@@ -146,7 +166,14 @@ class SteamOSClient:
             return {"X-UC-Token": self._config.auth_token}
         return {}
 
-    async def connect(self) -> bool:
+    def ensure_session(self) -> aiohttp.ClientSession:
+        """Create the long-lived session used by the update_* methods.
+
+        Split out from connect() because establish_connection() needs the
+        session to exist *before* deciding whether the agent is healthy:
+        update_games()/update_system_data() silently return False with no
+        session, which would read as "agent is down" on a perfectly live box.
+        """
         if not self._session:
             connector = aiohttp.TCPConnector(limit=3)
             self._session = aiohttp.ClientSession(
@@ -154,9 +181,7 @@ class SteamOSClient:
                 connector=connector,
                 headers=self._headers(),
             )
-        if self._config.enable_hardware_monitoring:
-            return await self.update_system_data()
-        return await self.test_agent()
+        return self._session
 
     async def close(self) -> None:
         if self._session:
@@ -188,6 +213,37 @@ class SteamOSClient:
 
     async def test_agent(self) -> bool:
         return await self.agent_status() == 200
+
+    async def fetch_wol_mac(self) -> str:
+        """The HTPC's own NIC MAC, read live from /health.
+
+        Not a value a user types in once: a motherboard or NIC swap changes it
+        silently, and nothing would catch that with a manually-entered MAC.
+        Reading it here, on every connect, is what lets setup and reconnects
+        both stay correct with no user action. Empty on any failure or against
+        an agent old enough to predate the `wol` block.
+        """
+        session = self._session
+        close_after = False
+        if not session:
+            session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=5), headers=self._headers())
+            close_after = True
+        try:
+            url = f"http://{self._config.host}:{AGENT_PORT}/health"
+            async with session.get(url) as resp:
+                if resp.status != 200:
+                    return ""
+                data = await resp.json()
+        except Exception:
+            return ""
+        finally:
+            if close_after:
+                await session.close()
+
+        wol_data = data.get("wol")
+        if isinstance(wol_data, dict):
+            return wol_data.get("mac_address") or ""
+        return ""
 
     async def test_sensors(self) -> dict[str, Any]:
         """Test-connect to /sensors during setup; returns success + a rough value count."""

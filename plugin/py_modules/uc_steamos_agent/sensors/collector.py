@@ -12,6 +12,7 @@ test hardware to verify against — left unimplemented rather than guessed.
 
 import threading
 import time
+from typing import Callable
 
 from . import battery, cpu, fan, gpu, memory, network, storage
 
@@ -20,9 +21,23 @@ DEFAULT_POLL_INTERVAL_S = 2.0
 
 
 class SensorCollector:
-    def __init__(self, storage_path: str = "/home", poll_interval_s: float = DEFAULT_POLL_INTERVAL_S):
+    """Samples every sub-collector into one snapshot dict.
+
+    `wol_fn` is injected rather than imported: Wake-on-LAN state lives in
+    commands/ (it needs root + ethtool), and having sensors/ reach into
+    commands/ would invert the layering. main.py wires it up. None means this
+    agent build reports no WoL block at all, which the integration renders as
+    "agent does not report WoL state" rather than guessing."""
+
+    def __init__(
+        self,
+        storage_path: str = "/home",
+        poll_interval_s: float = DEFAULT_POLL_INTERVAL_S,
+        wol_fn: Callable[[], dict | None] | None = None,
+    ):
         self._storage_path = storage_path
         self._poll_interval_s = poll_interval_s
+        self._wol_fn = wol_fn
         self._cpu_load = cpu.CpuLoadSampler()
         self._network = network.NetworkThroughputSampler()
         self._lock = threading.Lock()
@@ -56,7 +71,7 @@ class SensorCollector:
             lambda: storage.read_usage(self._storage_path), (None, None, None)
         )
 
-        return {
+        snapshot = {
             "schema_version": SCHEMA_VERSION,
             "timestamp": time.time(),
             "cpu": {
@@ -84,6 +99,13 @@ class SensorCollector:
             "fans": self._safe(fan.read_fan_speeds, []),
             "battery": self._safe(battery.read_battery, dict(battery.EMPTY)),
         }
+        if self._wol_fn is not None:
+            # Omitted entirely when unreadable: absent != unsupported, and the
+            # integration must not render a NIC we couldn't query as "no WoL".
+            status = self._safe(self._wol_fn, None)
+            if status:
+                snapshot["wol"] = status
+        return snapshot
 
     @staticmethod
     def _safe(fn, default):

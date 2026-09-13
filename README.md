@@ -11,13 +11,15 @@ See [`docs/protocol.md`](docs/protocol.md) for the wire protocol both sides impl
 
 ## Status
 
-Working end-to-end on real hardware. Both halves are built, unit-tested (135 + 21 tests), and verified live against a Bazzite/Gamescope box and a physical UC Remote 3 — see `docs/hardware-notes.md` for the raw findings.
+Working end-to-end on real hardware. Both halves are built, unit-tested (156 + 81 tests), and verified live against a Bazzite/Gamescope box and a physical UC Remote 3 — see `docs/hardware-notes.md` for the raw findings.
 
 Confirmed on real hardware: uinput navigation of Big Picture, volume via PipeWire, native sensor collection, Steam URI shortcuts, the three-tier game-exit escalation (`steam_overlay` / `alt_f4` / `force_quit_game`), launching a game by appid from the recently-played list, and the full Remote pairing/setup flow with all entities coming up `ACTIVE`/`CONNECTED`.
 
-Not yet verified: the power commands (`power_sleep`/`hibernate`/`shutdown`/`restart`) are implemented and unit-tested but never fired live, since doing so takes the test box down; and how the Remote's on-device UI actually renders the custom pages, which needs a human to add the entities to a page first.
+Not yet verified: **the Wake-on-LAN round trip** — packet construction, the broadcast+unicast send, and the probe that decides whether a box is asleep or merely un-answering are all checked against the live box, but actually raising it from off has not been done, since that takes the test box (and the agent reporting it) down. The power commands (`power_sleep`/`hibernate`/`shutdown`/`restart`) are likewise implemented and unit-tested but never fired live, for the same reason. And how the Remote's on-device UI actually renders the custom pages still needs a human to add the entities to a page first.
 
-Deliberately out of scope: Wake-on-LAN (a separate UC integration owns it), virtual gamepad input, and general-purpose app/URL launching — see `docs/command-mapping.md`'s "Deliberately not implemented" section for the reasoning on each.
+Wake-on-LAN is opt-in: enter the box's MAC during integration setup and you get a Power On action on the Remote's `remote` entity plus a "Wake-on-LAN" monitoring view showing whether the NIC is actually armed. Leave it blank and nothing changes. The agent-side `wol_arm` config flag (off by default) additionally re-arms the NIC whenever the plugin starts, since the flag is RAM state that a driver reload or power-off clears — only the firmware setting is durable across that. See `docs/command-mapping.md`'s Wake-on-LAN row for why the packet is sent by the integration and not the agent.
+
+Deliberately out of scope: virtual gamepad input and general-purpose app/URL launching — see `docs/command-mapping.md`'s "Deliberately not implemented" section for the reasoning on each.
 
 ## Security
 

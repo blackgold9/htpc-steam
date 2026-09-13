@@ -18,7 +18,7 @@ from ucapi import StatusCodes, media_player
 from ucapi_framework import MediaPlayerEntity
 
 from uc_intg_steamos.config import SteamOSConfig
-from uc_intg_steamos.device import SteamOSDevice
+from uc_intg_steamos.device import STATE_ON, SteamOSDevice
 
 _LOG = logging.getLogger(__name__)
 
@@ -49,7 +49,10 @@ class SteamOSGameLauncher(MediaPlayerEntity):
         self.subscribe_to_device(device)
 
     async def sync_state(self) -> None:
-        if self._device.state == "UNAVAILABLE":
+        # Anything but ON means the list we're holding is stale and launching
+        # would silently fail, so the entity goes unavailable rather than
+        # offering games it can't start.
+        if self._device.state != STATE_ON:
             self.update({media_player.Attributes.STATE: media_player.States.UNAVAILABLE})
             return
 

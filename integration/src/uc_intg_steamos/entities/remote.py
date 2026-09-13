@@ -1,13 +1,25 @@
 """
 SteamOS remote entity with UI pages and system commands.
 
-Scoped for gaming use on a SteamOS/Gamescope HTPC, not media playback — no
+Scoped for gaming use on a SteamOS/Bazzite HTPC, not media playback — no
 play/pause/rewind/etc. transport controls; those were built for controlling
 movie/TV playback on upstream's Windows HTPC and don't fit here. Command set
 and pages otherwise differ from upstream (uc_intg_htpc): see
 docs/command-mapping.md for the full Windows -> SteamOS/Gamescope mapping.
 Only commands the agent (plugin/) actually implements as of this writing are
 exposed here — app launching, shortcuts, and Bluetooth land in a later phase.
+
+Power is modelled with the entity's native `on_off`/`toggle` features rather
+than a custom `power_on_wol` simple command, for two reasons:
+docs/command-mapping.md's core-api guidance is that dedicated power on/off
+commands should NOT be added as simple commands, and `remote.Commands.ON` is
+the only identifier the Remote's physical POWER button can be mapped to
+(`create_btn_mapping(Buttons.POWER, short="remote.on")`). A custom simple
+command would render as a page button and nothing else.
+
+ON therefore means "wake it" (a magic packet, if a MAC is configured) and OFF
+means `power_shutdown`. Wake is never sent through `POST /command`: the agent
+cannot receive it, since it is exactly the box being asleep.
 
 :license: MIT
 """
@@ -20,13 +32,19 @@ from ucapi.ui import UiPage, create_ui_icon, create_ui_text
 from ucapi_framework import RemoteEntity
 
 from uc_intg_steamos.config import SteamOSConfig
-from uc_intg_steamos.device import SteamOSDevice
+from uc_intg_steamos.device import STATE_OFF, STATE_ON, STATE_WAKING, SteamOSDevice
 
 _LOG = logging.getLogger(__name__)
 
 COMMAND_MAP = {
     "POWER_OFF": "power_shutdown",
 }
+
+FEATURES = [
+    remote.Features.ON_OFF,
+    remote.Features.TOGGLE,
+    remote.Features.SEND_CMD,
+]
 
 
 class SteamOSRemote(RemoteEntity):
@@ -56,13 +74,13 @@ class SteamOSRemote(RemoteEntity):
             _create_gamescope_page(),
             _create_game_session_page(),
             _create_function_keys_page(),
-            _create_power_page(),
+            _create_power_page(device.wol_available),
         ]
 
         super().__init__(
             entity_id,
             f"{device_config.name} Remote",
-            [remote.Features.SEND_CMD],
+            FEATURES,
             {remote.Attributes.STATE: remote.States.UNKNOWN},
             simple_commands=simple_commands,
             ui_pages=pages,
@@ -71,12 +89,35 @@ class SteamOSRemote(RemoteEntity):
         self.subscribe_to_device(device)
 
     async def sync_state(self) -> None:
-        if self._device.state == "UNAVAILABLE":
-            self.update({remote.Attributes.STATE: remote.States.UNAVAILABLE})
-        else:
+        """Map the device's four states onto remote's ON/OFF/UNAVAILABLE.
+
+        WAKING maps to OFF: `remote` has no transitional state, and showing OFF
+        while a wake is in flight is honest (it is still off) and leaves the
+        Power On affordance usable for a retry. The distinction lives in the
+        media-player dashboard, which does have room for the text.
+        """
+        state = self._device.state
+        if state == STATE_ON:
             self.update({remote.Attributes.STATE: remote.States.ON})
+        elif state in (STATE_OFF, STATE_WAKING):
+            self.update({remote.Attributes.STATE: remote.States.OFF})
+        else:
+            # UNAVAILABLE: the host answers but the agent doesn't. Not "off" —
+            # the box is on and something is wrong with Decky/the plugin.
+            self.update({remote.Attributes.STATE: remote.States.UNAVAILABLE})
 
     async def _handle_command(self, entity: Any, cmd_id: str, params: dict[str, Any] | None) -> StatusCodes:
+        if cmd_id == remote.Commands.ON:
+            return StatusCodes.OK if await self._wake() else StatusCodes.SERVER_ERROR
+        if cmd_id == remote.Commands.OFF:
+            return StatusCodes.OK if await self._device.send_command("power_shutdown") else StatusCodes.SERVER_ERROR
+        if cmd_id == remote.Commands.TOGGLE:
+            if self._device.state == STATE_ON:
+                ok = await self._device.send_command("power_shutdown")
+            else:
+                ok = await self._wake()
+            return StatusCodes.OK if ok else StatusCodes.SERVER_ERROR
+
         if cmd_id == remote.Commands.SEND_CMD:
             command = params.get("command") if params else None
             if command:
@@ -94,6 +135,16 @@ class SteamOSRemote(RemoteEntity):
                 return StatusCodes.OK if success else StatusCodes.SERVER_ERROR
 
         return StatusCodes.BAD_REQUEST
+
+    async def _wake(self) -> bool:
+        """Wake the box locally — never via the agent's /command endpoint."""
+        if not self._device.wol_available:
+            _LOG.info(
+                "%s Power On has no effect: no MAC address configured, so Wake-on-LAN is disabled",
+                self._device.log_id,
+            )
+            return False
+        return await self._device.wake_on_lan()
 
     async def _execute_command(self, command: str) -> bool:
         actual = COMMAND_MAP.get(command, command)
@@ -188,15 +239,25 @@ def _create_function_keys_page() -> UiPage:
     return page
 
 
-def _create_power_page() -> UiPage:
-    """No PowerOn button: Wake-on-LAN is out of scope here (a separate,
-    existing UC integration handles waking the box) — see
-    docs/command-mapping.md."""
+def _create_power_page(wol_available: bool) -> UiPage:
+    """Power On appears only when a MAC address is configured — a button that
+    silently does nothing is worse than no button.
+
+    Note it is a `remote.on` command, not an agent command: the agent can't be
+    told to power itself on, since it is offline by definition. The remaining
+    four are agent commands (`systemctl`), and Sleep/Hibernate/PowerOff here
+    are what a WoL-capable NIC then has to be woken from — see
+    docs/hardware-notes.md for which of those the target box actually wakes from.
+    """
     page = UiPage(page_id="power", name="Power & System")
-    page.items.extend([
-        create_ui_text("Sleep", 0, 0, cmd="power_sleep"),
-        create_ui_text("Hibernate", 1, 0, cmd="power_hibernate"),
-        create_ui_text("PowerOff", 2, 0, cmd="power_shutdown"),
-        create_ui_text("Restart", 3, 0, cmd="power_restart"),
+    items = []
+    if wol_available:
+        items.append(create_ui_text("Power On", 0, 0, cmd=remote.Commands.ON))
+    items.extend([
+        create_ui_text("Sleep", 1, 0, cmd="power_sleep"),
+        create_ui_text("Hibernate", 2, 0, cmd="power_hibernate"),
+        create_ui_text("PowerOff", 3, 0, cmd="power_shutdown"),
+        create_ui_text("Restart", 0, 1, cmd="power_restart"),
     ])
+    page.items.extend(items)
     return page

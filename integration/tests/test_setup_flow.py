@@ -66,8 +66,12 @@ async def test_successful_setup_returns_populated_config(flow, monkeypatch):
     async def fake_test_sensors(self):
         return {"success": True, "sensor_count": 9}
 
+    async def fake_fetch_wol_mac(self):
+        return ""
+
     monkeypatch.setattr(SteamOSClient, "agent_status", fake_agent_status)
     monkeypatch.setattr(SteamOSClient, "test_sensors", fake_test_sensors)
+    monkeypatch.setattr(SteamOSClient, "fetch_wol_mac", fake_fetch_wol_mac)
 
     config = await flow.query_device({
         "host": "203.0.113.10",
@@ -92,8 +96,55 @@ async def test_monitoring_disabled_skips_sensor_test(flow, monkeypatch):
     def fail_if_called(self):
         raise AssertionError("test_sensors should not be called when monitoring is disabled")
 
+    async def fake_fetch_wol_mac(self):
+        return ""
+
     monkeypatch.setattr(SteamOSClient, "agent_status", fake_agent_status)
     monkeypatch.setattr(SteamOSClient, "test_sensors", fail_if_called)
+    monkeypatch.setattr(SteamOSClient, "fetch_wol_mac", fake_fetch_wol_mac)
 
     config = await flow.query_device({"host": "203.0.113.10", "enable_hardware_monitoring": "disabled"})
     assert config.enable_hardware_monitoring is False
+
+
+async def test_mac_is_discovered_from_the_agent_not_typed_in(flow, monkeypatch):
+    """The MAC comes from the agent's own /health, not a setup field: a
+    motherboard/NIC swap must not require the user to remember to update it."""
+
+    async def fake_agent_status(self):
+        return 200
+
+    async def fake_test_sensors(self):
+        return {"success": True, "sensor_count": 9}
+
+    async def fake_fetch_wol_mac(self):
+        return "AA:BB:CC:DD:EE:FF"
+
+    monkeypatch.setattr(SteamOSClient, "agent_status", fake_agent_status)
+    monkeypatch.setattr(SteamOSClient, "test_sensors", fake_test_sensors)
+    monkeypatch.setattr(SteamOSClient, "fetch_wol_mac", fake_fetch_wol_mac)
+
+    config = await flow.query_device({"host": "203.0.113.10"})
+    assert config.mac_address == "aabbccddeeff"
+
+
+async def test_agent_without_a_readable_mac_leaves_wake_disabled(flow, monkeypatch):
+    """Old agent, or a NIC ethtool can't read: no MAC, no wake capability --
+    same as today, just discovered instead of typed."""
+
+    async def fake_agent_status(self):
+        return 200
+
+    async def fake_fetch_wol_mac(self):
+        return ""
+
+    monkeypatch.setattr(SteamOSClient, "agent_status", fake_agent_status)
+    monkeypatch.setattr(SteamOSClient, "fetch_wol_mac", fake_fetch_wol_mac)
+
+    config = await flow.query_device({
+        "host": "203.0.113.10",
+        "enable_hardware_monitoring": "disabled",
+    })
+
+    assert config.mac_address == ""
+    assert config.broadcast_address == "255.255.255.255"

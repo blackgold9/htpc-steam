@@ -29,6 +29,20 @@ per-plugin settings directory (`DECKY_PLUGIN_SETTINGS_DIR`, derived from
 See `../docs/protocol.md`'s "Auth posture" for what the token does and doesn't
 protect against.
 
+**Optional — Wake-on-LAN arming.** `"wol_arm": true` in the same `config.json`
+makes the agent re-apply `ethtool -s <routing-iface> wol g` each time the plugin
+starts. Only needed if you want the box wakeable by magic packet: the flag is RAM
+state on most drivers, so a driver reload or a power-off clears it and firmware is
+the only durable place to set it. Off by default because writing a NIC-wide power
+setting the user didn't ask for is not a monitoring plugin's business. Bazzite
+ships an equivalent `force-wol.service` (disabled); enabling that instead is fine —
+both are idempotent, and the agent reports the resulting state either way.
+
+`GET /health` and `GET /sensors` then carry a `wol` block (arming state, both
+kernel gates, interface, driver). It is *omitted* when it can't be read — notably
+an unprivileged `ethtool` cannot see the Wake-on fields at all — and absence means
+"unknown", never "this NIC can't do Wake-on-LAN".
+
 ## Prerequisites
 
 - [Decky Loader](https://decky.xyz/) already installed on the target box (`ujust setup-decky` on Bazzite).
