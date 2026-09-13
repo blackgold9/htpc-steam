@@ -40,6 +40,7 @@ import threading
 import time
 
 from ..sensors.network import default_interface
+from ..subprocess_env import host_env
 
 _LOG = logging.getLogger(__name__)
 
@@ -122,7 +123,12 @@ def read_status(iface: str | None = None, sys_root: str = "/sys") -> dict | None
         return None
     try:
         proc = subprocess.run(
-            ["ethtool", iface], capture_output=True, text=True, timeout=5, check=False
+            ["ethtool", iface],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+            env=host_env(),
         )
     except (OSError, subprocess.SubprocessError) as err:
         _LOG.debug("ethtool %s failed: %s", iface, err)
@@ -186,7 +192,9 @@ class WakeOnLanMonitor:
             _LOG.warning("WoL arm requested but no routing interface exists")
             return False
         try:
-            subprocess.run(["ethtool", "-s", iface, "wol", _WOL_FLAG], check=True, timeout=5)
+            subprocess.run(
+                ["ethtool", "-s", iface, "wol", _WOL_FLAG], check=True, timeout=5, env=host_env()
+            )
         except (OSError, subprocess.SubprocessError) as err:
             _LOG.warning("Failed to arm Wake-on-LAN on %s: %s", iface, err)
             return False

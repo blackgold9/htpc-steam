@@ -25,6 +25,8 @@ process's /proc/<pid>/environ, so this works without special permissions.
 import os
 import pwd
 
+from ..subprocess_env import host_env
+
 _SESSION_ENV_KEYS = (
     "DISPLAY",
     "WAYLAND_DISPLAY",
@@ -77,7 +79,7 @@ def find_session_process_env(uid: int, proc_root: str = "/proc") -> dict[str, st
 
 
 def session_env(uid: int, base_env: dict | None = None, proc_root: str = "/proc") -> dict:
-    env = dict(base_env if base_env is not None else os.environ)
+    env = dict(base_env if base_env is not None else host_env())
     env["XDG_RUNTIME_DIR"] = f"/run/user/{uid}"
 
     session_vars = find_session_process_env(uid, proc_root)
