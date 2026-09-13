@@ -84,6 +84,17 @@ def wakeup_enabled(iface: str, sys_root: str = "/sys") -> bool:
         return False
 
 
+def mac_address(iface: str, sys_root: str = "/sys") -> str:
+    """The interface's own MAC, straight from the kernel -- not a value a user
+    typed in once and that a motherboard/NIC swap can silently invalidate."""
+    path = os.path.join(sys_root, "class", "net", iface, "address")
+    try:
+        with open(path, encoding="ascii") as f:
+            return f.read().strip()
+    except OSError:
+        return ""
+
+
 def parse_ethtool(output: str) -> dict:
     """Extract the Wake-on fields from `ethtool <iface>` output.
 
@@ -146,6 +157,7 @@ def read_status(iface: str | None = None, sys_root: str = "/sys") -> dict | None
     status["interface"] = iface
     status["driver"] = driver_name(iface, sys_root)
     status["may_wakeup"] = wakeup_enabled(iface, sys_root)
+    status["mac_address"] = mac_address(iface, sys_root)
     return status
 
 

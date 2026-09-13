@@ -7,12 +7,12 @@ One port, default **8086** (configurable), single HTTP server — unlike upstrea
 ## Endpoints
 
 ```json
-{"status": "ok", "version": "0.1.0", "uptime_s": 123.4, "uinput_available": true, "wol_arm": false, "wol": {"reported": true, "supported": true, "enabled": false, "supported_flags": "pumbg", "wake_on": "", "interface": "enp9s0", "driver": "r8169", "may_wakeup": true}}
+{"status": "ok", "version": "0.1.0", "uptime_s": 123.4, "uinput_available": true, "wol_arm": false, "wol": {"reported": true, "supported": true, "enabled": false, "supported_flags": "pumbg", "wake_on": "", "interface": "enp9s0", "driver": "r8169", "may_wakeup": true, "mac_address": "30:56:0f:b6:7a:9e"}}
 ```
 
 `uinput_available` lets the integration surface degraded key-injection mode without waiting for a failed `/command` call. Status implemented: Phase 0 for those fields; the `wol` fields below are Phase 4 (unreleased).
 
-The `wol` block is the NIC's Wake-on-LAN state, measured by the agent because it runs as root and an unprivileged `ethtool` cannot see the Wake-on fields at all (verified 2026-09-05: as a plain user, `ethtool <iface>` exits 0 with a full link dump and *neither* `Supports Wake-on:` nor `Wake-on:`). It is **omitted entirely when unreadable** — absent means "unknown", and must not be rendered as "this NIC cannot do Wake-on-LAN". `wol_arm` is the configured preference, reported even when `wol` is absent, so "never asked for WoL" stays distinguishable from "asked and arming failed". Both are also present in `GET /sensors`' `wol` field; `/health` carries them because the integration's wake decision can't depend on hardware monitoring being enabled. Status: Phase 4 (unreleased).
+The `wol` block is the NIC's Wake-on-LAN state, measured by the agent because it runs as root and an unprivileged `ethtool` cannot see the Wake-on fields at all (verified 2026-09-05: as a plain user, `ethtool <iface>` exits 0 with a full link dump and *neither* `Supports Wake-on:` nor `Wake-on:`). It is **omitted entirely when unreadable** — absent means "unknown", and must not be rendered as "this NIC cannot do Wake-on-LAN". `wol_arm` is the configured preference, reported even when `wol` is absent, so "never asked for WoL" stays distinguishable from "asked and arming failed". Both are also present in `GET /sensors`' `wol` field; `/health` carries them because the integration's wake decision can't depend on hardware monitoring being enabled. `mac_address` (straight from `/sys/class/net/<iface>/address`) is what lets the integration discover its wake target itself instead of asking the user to type one in and hope it never goes stale after a motherboard/NIC swap. Status: Phase 4 (unreleased).
 
 
 ### `GET /status`
@@ -43,7 +43,7 @@ Optional auth: if `auth_token` is configured (non-empty), requests must carry a 
   "motherboard": {"temp_avg_c": null, "temp_max_c": null},
   "fans": [{"label": "", "rpm": 0}],
   "battery": {"present": false, "percent": null, "charging": null, "power_w": null},
-  "wol": {"reported": true, "supported": true, "enabled": false, "supported_flags": "pumbg", "wake_on": "", "interface": "enp9s0", "driver": "r8169", "may_wakeup": true}
+  "wol": {"reported": true, "supported": true, "enabled": false, "supported_flags": "pumbg", "wake_on": "", "interface": "enp9s0", "driver": "r8169", "may_wakeup": true, "mac_address": "30:56:0f:b6:7a:9e"}
 }
 ```
 

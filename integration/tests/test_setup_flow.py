@@ -66,8 +66,12 @@ async def test_successful_setup_returns_populated_config(flow, monkeypatch):
     async def fake_test_sensors(self):
         return {"success": True, "sensor_count": 9}
 
+    async def fake_fetch_wol_mac(self):
+        return ""
+
     monkeypatch.setattr(SteamOSClient, "agent_status", fake_agent_status)
     monkeypatch.setattr(SteamOSClient, "test_sensors", fake_test_sensors)
+    monkeypatch.setattr(SteamOSClient, "fetch_wol_mac", fake_fetch_wol_mac)
 
     config = await flow.query_device({
         "host": "203.0.113.10",
@@ -92,31 +96,20 @@ async def test_monitoring_disabled_skips_sensor_test(flow, monkeypatch):
     def fail_if_called(self):
         raise AssertionError("test_sensors should not be called when monitoring is disabled")
 
+    async def fake_fetch_wol_mac(self):
+        return ""
+
     monkeypatch.setattr(SteamOSClient, "agent_status", fake_agent_status)
     monkeypatch.setattr(SteamOSClient, "test_sensors", fail_if_called)
+    monkeypatch.setattr(SteamOSClient, "fetch_wol_mac", fake_fetch_wol_mac)
 
     config = await flow.query_device({"host": "203.0.113.10", "enable_hardware_monitoring": "disabled"})
     assert config.enable_hardware_monitoring is False
 
 
-async def test_bad_mac_is_rejected_before_touching_the_agent(flow, monkeypatch):
-    """A malformed MAC must fail at setup, not at the first wake weeks later
-    when the box is already off and the only feedback is a log line. It also
-    must fail *before* the network call, so the error the user sees names the
-    MAC rather than the host."""
-
-    def fail_if_called(self):
-        raise AssertionError("a malformed MAC should never reach the agent")
-
-    monkeypatch.setattr(SteamOSClient, "agent_status", fail_if_called)
-
-    with pytest.raises(ValueError, match="not a valid MAC address"):
-        await flow.query_device({"host": "203.0.113.10", "mac_address": "aa:bb:cc:dd:ee"})
-
-
-async def test_mac_is_normalised_whatever_separator_was_typed(flow, monkeypatch):
-    """The stored form is what builds the magic packet, so a separator leaking
-    into it would silently produce a packet that wakes nothing."""
+async def test_mac_is_discovered_from_the_agent_not_typed_in(flow, monkeypatch):
+    """The MAC comes from the agent's own /health, not a setup field: a
+    motherboard/NIC swap must not require the user to remember to update it."""
 
     async def fake_agent_status(self):
         return 200
@@ -124,23 +117,32 @@ async def test_mac_is_normalised_whatever_separator_was_typed(flow, monkeypatch)
     async def fake_test_sensors(self):
         return {"success": True, "sensor_count": 9}
 
+    async def fake_fetch_wol_mac(self):
+        return "AA:BB:CC:DD:EE:FF"
+
     monkeypatch.setattr(SteamOSClient, "agent_status", fake_agent_status)
     monkeypatch.setattr(SteamOSClient, "test_sensors", fake_test_sensors)
+    monkeypatch.setattr(SteamOSClient, "fetch_wol_mac", fake_fetch_wol_mac)
 
-    for typed in ("AA:BB:CC:DD:EE:FF", "aa-bb-cc-dd-ee-ff", "aa.bb.cc.dd.ee.ff", "aabbccddeeff"):
-        config = await flow.query_device({"host": "203.0.113.10", "mac_address": typed})
-        assert config.mac_address == "aabbccddeeff", typed
+    config = await flow.query_device({"host": "203.0.113.10"})
+    assert config.mac_address == "aabbccddeeff"
 
 
-async def test_blank_mac_leaves_wake_disabled(flow, monkeypatch):
+async def test_agent_without_a_readable_mac_leaves_wake_disabled(flow, monkeypatch):
+    """Old agent, or a NIC ethtool can't read: no MAC, no wake capability --
+    same as today, just discovered instead of typed."""
+
     async def fake_agent_status(self):
         return 200
 
+    async def fake_fetch_wol_mac(self):
+        return ""
+
     monkeypatch.setattr(SteamOSClient, "agent_status", fake_agent_status)
+    monkeypatch.setattr(SteamOSClient, "fetch_wol_mac", fake_fetch_wol_mac)
 
     config = await flow.query_device({
         "host": "203.0.113.10",
-        "mac_address": "   ",
         "enable_hardware_monitoring": "disabled",
     })
 

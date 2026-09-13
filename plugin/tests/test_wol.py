@@ -97,12 +97,24 @@ def test_missing_wakeup_file_is_false(tmp_path):
     assert wol.wakeup_enabled("enp9s0", sys_root=str(tmp_path)) is False
 
 
-def _fake_sysfs(tmp_path, iface="enp9s0", driver="r8169", wakeup="enabled"):
+def test_mac_address_reads_sysfs(tmp_path):
+    net = tmp_path / "class" / "net" / "enp9s0"
+    net.mkdir(parents=True)
+    (net / "address").write_text("30:56:0f:b6:7a:9e\n")
+    assert wol.mac_address("enp9s0", sys_root=str(tmp_path)) == "30:56:0f:b6:7a:9e"
+
+
+def test_missing_mac_file_is_empty_string(tmp_path):
+    assert wol.mac_address("enp9s0", sys_root=str(tmp_path)) == ""
+
+
+def _fake_sysfs(tmp_path, iface="enp9s0", driver="r8169", wakeup="enabled", mac="30:56:0f:b6:7a:9e"):
     device = tmp_path / "class" / "net" / iface / "device"
     (device / "power").mkdir(parents=True)
     (tmp_path / "drivers" / driver).mkdir(parents=True)
     (device / "driver").symlink_to(tmp_path / "drivers" / driver)
     (device / "power" / "wakeup").write_text(wakeup)
+    (tmp_path / "class" / "net" / iface / "address").write_text(mac)
     return str(tmp_path)
 
 
@@ -121,6 +133,7 @@ def test_read_status_merges_ethtool_driver_and_wakeup(monkeypatch, tmp_path):
         "interface": "enp9s0",
         "driver": "r8169",
         "may_wakeup": True,
+        "mac_address": "30:56:0f:b6:7a:9e",
     }
 
 

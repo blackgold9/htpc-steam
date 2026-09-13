@@ -135,6 +135,19 @@ class SteamOSDevice(PollingDevice):
     async def launch_game(self, appid: int) -> bool:
         return await self.send_command(f"launch_game:{appid}")
 
+    async def _sync_wol_mac(self) -> None:
+        """Refresh the stored WoL MAC from the agent on every successful connect.
+
+        Catches a motherboard/NIC swap after initial setup: the next time the
+        box is reachable, its current MAC replaces whatever was persisted
+        before, with no user action needed. A blank agent response (old agent,
+        unreadable NIC) is left alone rather than clearing a working MAC.
+        """
+        mac_address = await self._client.fetch_wol_mac()
+        if mac_address and mac_address != self._config.mac_address:
+            _LOG.info("%s Wake-on-LAN MAC changed: %s", self.log_id, mac_address)
+            self.update_config(mac_address=mac_address)
+
     async def wake_on_lan(self) -> bool:
         """Fire a magic packet and start watching for the box to come back.
 
@@ -221,6 +234,8 @@ class SteamOSDevice(PollingDevice):
         if not await self._client.test_agent():
             await self._drop_connection()
             return False
+
+        await self._sync_wol_mac()
 
         if self._config.enable_hardware_monitoring and await self._client.update_system_data():
             self._system_data = self._client.system_data

@@ -32,8 +32,9 @@ MAC = "aa:bb:cc:dd:ee:ff"
 class FakeClient:
     """Stands in for SteamOSClient; `healthy` flips the whole box on or off."""
 
-    def __init__(self, healthy: bool = True) -> None:
+    def __init__(self, healthy: bool = True, reported_mac: str = "") -> None:
         self.healthy = healthy
+        self.reported_mac = reported_mac
         self.closed = False
         self.system_data = "sensors"
         self.games = [{"appid": 1, "name": "Game"}]
@@ -43,6 +44,11 @@ class FakeClient:
 
     async def test_agent(self) -> bool:
         return self.healthy
+
+    async def fetch_wol_mac(self) -> str:
+        """Empty means "nothing new from the agent" -- leaves the configured
+        MAC alone, matching a real agent that predates the wol block."""
+        return self.reported_mac
 
     async def update_system_data(self) -> bool:
         return self.healthy
@@ -126,6 +132,32 @@ async def test_healthy_agent_reaches_on_and_loads_data(monkeypatch):
 
     assert device.state == STATE_ON
     assert device.games == [{"appid": 1, "name": "Game"}]
+
+
+async def test_connect_picks_up_a_mac_changed_since_setup(monkeypatch):
+    """A motherboard/NIC swap after setup must not require redoing setup: the
+    next successful connect re-reads the MAC from the agent and persists it."""
+    device = _device(monkeypatch, mac="aa:aa:aa:aa:aa:aa")
+    new_mac = "30:56:0f:b6:7a:9e"
+    monkeypatch.setattr(
+        "uc_intg_steamos.device.SteamOSClient",
+        lambda cfg: FakeClient(healthy=True, reported_mac=new_mac),
+    )
+
+    await device.establish_connection()
+
+    assert device.device_config.mac_address == new_mac
+
+
+async def test_connect_leaves_mac_alone_when_agent_reports_nothing(monkeypatch):
+    """An old agent (no `wol` block) or an unreadable NIC must not clear a
+    MAC that already works."""
+    device = _device(monkeypatch, mac=MAC)
+    monkeypatch.setattr("uc_intg_steamos.device.SteamOSClient", lambda cfg: FakeClient(healthy=True, reported_mac=""))
+
+    await device.establish_connection()
+
+    assert device.device_config.mac_address == MAC
 
 
 async def test_wake_sets_waking_not_on(monkeypatch):

@@ -58,6 +58,7 @@ class SystemData:
         self.wol_supported: bool = False
         self.wol_enabled: bool = False
         self.wol_may_wakeup: bool = False
+        self.wol_mac_address: str = ""
         self.last_updated: float = 0.0
 
 
@@ -114,6 +115,7 @@ def parse_sensor_data(raw: dict[str, Any]) -> SystemData:
         sd.wol_supported = bool(wol.get("supported"))
         sd.wol_enabled = bool(wol.get("enabled"))
         sd.wol_may_wakeup = bool(wol.get("may_wakeup"))
+        sd.wol_mac_address = wol.get("mac_address") or ""
 
     return sd
 
@@ -211,6 +213,37 @@ class SteamOSClient:
 
     async def test_agent(self) -> bool:
         return await self.agent_status() == 200
+
+    async def fetch_wol_mac(self) -> str:
+        """The HTPC's own NIC MAC, read live from /health.
+
+        Not a value a user types in once: a motherboard or NIC swap changes it
+        silently, and nothing would catch that with a manually-entered MAC.
+        Reading it here, on every connect, is what lets setup and reconnects
+        both stay correct with no user action. Empty on any failure or against
+        an agent old enough to predate the `wol` block.
+        """
+        session = self._session
+        close_after = False
+        if not session:
+            session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=5), headers=self._headers())
+            close_after = True
+        try:
+            url = f"http://{self._config.host}:{AGENT_PORT}/health"
+            async with session.get(url) as resp:
+                if resp.status != 200:
+                    return ""
+                data = await resp.json()
+        except Exception:
+            return ""
+        finally:
+            if close_after:
+                await session.close()
+
+        wol_data = data.get("wol")
+        if isinstance(wol_data, dict):
+            return wol_data.get("mac_address") or ""
+        return ""
 
     async def test_sensors(self) -> dict[str, Any]:
         """Test-connect to /sensors during setup; returns success + a rough value count."""

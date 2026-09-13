@@ -66,11 +66,6 @@ class SteamOSSetupFlow(BaseSetupFlow[SteamOSConfig]):
                     "field": {"text": {"value": ""}},
                 },
                 {
-                    "id": "mac_address",
-                    "label": {"en": "MAC Address (Optional — enables Wake-on-LAN)"},
-                    "field": {"text": {"value": "", "hint": {"en": "aa:bb:cc:dd:ee:ff"}}},
-                },
-                {
                     "id": "broadcast_address",
                     "label": {"en": "WoL Broadcast Address (Optional)"},
                     "field": {"text": {"value": "255.255.255.255", "hint": {"en": "use the subnet broadcast if 255.255.255.255 is dropped"}}},
@@ -87,17 +82,7 @@ class SteamOSSetupFlow(BaseSetupFlow[SteamOSConfig]):
         enable_hw = input_values.get("enable_hardware_monitoring", "enabled") == "enabled"
         temp_unit = input_values.get("temperature_unit", "celsius")
         auth_token = input_values.get("auth_token", "").strip()
-        mac_address = input_values.get("mac_address", "").strip()
         broadcast_address = input_values.get("broadcast_address", "").strip() or "255.255.255.255"
-
-        # Reject a malformed MAC here rather than at the first wake attempt,
-        # when the box is already off and the only feedback would be a log
-        # line. Same spirit as the 401-on-wrong-token check below.
-        if mac_address and not wol.validate_mac(mac_address):
-            raise ValueError(
-                f"'{mac_address}' is not a valid MAC address. Use the form aa:bb:cc:dd:ee:ff "
-                "(shown by `cat /sys/class/net/<iface>/address` on the HTPC), or leave it blank."
-            )
 
         config = SteamOSConfig(
             identifier=f"steamos_{host.replace('.', '_')}",
@@ -106,7 +91,6 @@ class SteamOSSetupFlow(BaseSetupFlow[SteamOSConfig]):
             enable_hardware_monitoring=enable_hw,
             temperature_unit=temp_unit,
             auth_token=auth_token,
-            mac_address=wol.normalize_mac(mac_address) if mac_address else "",
             broadcast_address=broadcast_address,
         )
 
@@ -132,6 +116,16 @@ class SteamOSSetupFlow(BaseSetupFlow[SteamOSConfig]):
                         f"Agent reachable but sensor data unavailable: {result.get('error', 'Unknown error')}"
                     )
                 _LOG.info("Sensor connection test passed with %d values", result.get("sensor_count", 0))
+
+            # Read the MAC from the agent itself rather than asking the user to
+            # type it in: a value they'd have to remember to update by hand
+            # after every motherboard/NIC swap is exactly the kind of thing
+            # that goes stale silently. Empty (old agent, unreadable NIC) just
+            # means no WoL capability, same as an unset MAC always has.
+            mac_address = await client.fetch_wol_mac()
+            if mac_address:
+                config.mac_address = wol.normalize_mac(mac_address)
+                _LOG.info("Wake-on-LAN MAC discovered from agent: %s", config.mac_address)
         finally:
             await client.close()
 

@@ -17,7 +17,9 @@ class SteamOSConfig:
     auth_token: str = ""
     # Wake-on-LAN is opt-in exactly like auth_token: an empty MAC means no
     # wake capability, no Power On button, and no behaviour change at all for
-    # users who don't want it.
+    # users who don't want it. Not user-entered -- device.py reads this from
+    # the agent's /health on every connect, so a motherboard/NIC swap doesn't
+    # leave a stale value behind.
     mac_address: str = ""
     # Limited broadcast by default. The subnet-directed form (e.g.
     # 192.168.1.255) is the override for networks that drop 255.255.255.255;
