@@ -4,3 +4,5 @@ testpaths = ["tests"]
 [tool.ruff]
 line-length = 110
 target-version = "py311"
+# Verbatim CPython 3.11.7 copies; not our code to style.
+extend-exclude = ["py_modules/uc_steamos_agent/_stdlib_fallback"]

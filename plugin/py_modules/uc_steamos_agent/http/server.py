@@ -8,12 +8,35 @@ uinput writes for the same reason.
 import hmac
 import json
 import time
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Callable
 
 from ..commands.dispatcher import Dispatcher
 from ..config import AgentConfig
 from . import handlers
+
+try:
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+except ModuleNotFoundError as missing:
+    # Decky Loader 3.2.9 freezes CPython 3.11.7 with a 398-module stdlib subset
+    # that dropped http.server and socketserver (it kept http, http.client and
+    # http.cookies), so the import above raises in plugin_loader on the target
+    # while passing on every dev-box/CI interpreter.
+    #
+    # The copies live inside our own package rather than at py_modules/ top
+    # level for two reasons. main.py prepends py_modules to sys.path, so a
+    # socketserver.py out there would shadow the real stdlib module inside this
+    # plugin's own process and pin us to a 3.11 patch level forever, even after
+    # Decky moves to a newer CPython. And py_modules/http/server.py would not
+    # work at all: the bundle's `http` package resolves from inside the frozen
+    # archive with __path__ set to the bundle directory only, so our file is
+    # never found and the import keeps failing.
+    #
+    # (Other plugins are unaffected either way -- Decky forks one process per
+    # plugin -- so this is about correctness for us, not protecting them.)
+    # Re-raising unrelated misses keeps a genuine import bug visible.
+    if missing.name not in {"http.server", "socketserver"}:
+        raise
+    from .._stdlib_fallback.http_server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 
 # Commands are tiny JSON ({"command": "..."}); anything over this is a
