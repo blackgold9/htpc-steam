@@ -4,6 +4,9 @@
 # zip (that's `decky plugin build`, for Phase 5 packaging).
 #
 # Usage: DECK_HOST=my-bazzite.local [DECK_USER=deck] [DECK_PORT=22] ./scripts/deploy.sh
+# DECK_USER is whoever owns ~/homebrew on the target (Bazzite's default user if
+# Homebrew was installed by them, not `deck`). Prompts twice for sudo: the
+# plugin dir is root-owned, and plugin_loader re-chowns it on every load.
 set -euo pipefail
 
 DECK_HOST="${DECK_HOST:?set DECK_HOST to the target hostname or IP}"
@@ -27,8 +30,16 @@ ssh -t -p "$DECK_PORT" "$DECK_USER@$DECK_HOST" \
   "sudo mkdir -p ~/$REMOTE_PLUGIN_DIR && sudo chown -R $DECK_USER:$DECK_USER ~/$REMOTE_PLUGIN_DIR"
 
 echo "Syncing $PLUGIN_DIR -> $DECK_USER@$DECK_HOST:$REMOTE_PLUGIN_DIR"
+# paho lives on the target only because the release zip pip-installs it there;
+# this checkout has none, so it must be protected from --delete (excluded
+# receiver-side files survive --delete unless --delete-excluded is passed) or
+# enabling MQTT later fails with ModuleNotFoundError and no clue why.
 rsync -azp --delete \
   --exclude 'node_modules' --exclude '.git' --exclude 'src' --exclude 'tests' --exclude 'cli' \
+  --exclude 'py_modules/paho' \
+  --exclude 'py_modules/paho_mqtt*.dist-info' \
+  --exclude '__pycache__' --exclude '*.pyc' --exclude 'py_modules/.lock' \
+  --exclude '.pytest_cache' \
   --rsh="ssh -p $DECK_PORT" \
   "$PLUGIN_DIR"/ "$DECK_USER@$DECK_HOST:$REMOTE_PLUGIN_DIR/"
 
