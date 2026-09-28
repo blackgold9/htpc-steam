@@ -44,7 +44,14 @@ def _post(url, payload, headers=None):
         return err.code, err.read()
 
 
-def _running_server(dispatcher=None, sensors_fn=None, games_fn=None, auth_token=""):
+def _running_server(
+    dispatcher=None,
+    sensors_fn=None,
+    games_fn=None,
+    auth_token="",
+    puck_snapshot_fn=None,
+    puck_events_fn=None,
+):
     config = AgentConfig(version="0.1.0", host="127.0.0.1", port=0, auth_token=auth_token)
     server = build_server(
         config,
@@ -52,6 +59,8 @@ def _running_server(dispatcher=None, sensors_fn=None, games_fn=None, auth_token=
         dispatcher=dispatcher or Dispatcher(),
         sensors_fn=sensors_fn,
         games_fn=games_fn,
+        puck_snapshot_fn=puck_snapshot_fn,
+        puck_events_fn=puck_events_fn,
     )
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
@@ -304,6 +313,56 @@ def test_malformed_content_length_is_rejected():
     port = server.server_address[1]
     try:
         assert _raw_post(port, "Content-Length: notanumber") == 400
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_controller_puck_snapshot_and_incremental_events_endpoints():
+    snapshot = {
+        "schema_version": 1,
+        "available": True,
+        "docked": False,
+        "charge_state": "discharging",
+        "battery_percent": 54,
+        "pickup_candidate": False,
+        "last_pickup_event": {"sequence": 7},
+        "diagnostics": {},
+    }
+    seen_sequences = []
+
+    def events_since(sequence):
+        seen_sequences.append(sequence)
+        return {
+            "boot_id": "boot-test",
+            "current_sequence": 7,
+            "events": [{"boot_id": "boot-test", "sequence": 7}] if sequence < 7 else [],
+        }
+
+    server, _ = _running_server(
+        puck_snapshot_fn=lambda: snapshot,
+        puck_events_fn=events_since,
+    )
+    port = server.server_address[1]
+    try:
+        status, body = _get(f"http://127.0.0.1:{port}/controller-puck")
+        assert status == 200
+        assert json.loads(body) == snapshot
+
+        status, body = _get(f"http://127.0.0.1:{port}/controller-puck/events?since=6")
+        assert status == 200
+        assert json.loads(body) == {
+            "boot_id": "boot-test",
+            "current_sequence": 7,
+            "events": [{"boot_id": "boot-test", "sequence": 7}],
+        }
+        assert seen_sequences == [6]
+
+        try:
+            _get(f"http://127.0.0.1:{port}/controller-puck/events?since=")
+            assert False, "expected blank since to be rejected"
+        except urllib.error.HTTPError as err:
+            assert err.code == 400
     finally:
         server.shutdown()
         server.server_close()

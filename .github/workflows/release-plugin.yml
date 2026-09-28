@@ -59,26 +59,17 @@ jobs:
           pnpm build
           test -s dist/index.js
 
-      - name: Assemble plugin directory
-        # Mirrors what `decky plugin build` produces: a single top-level
-        # directory named after the plugin, which is what Decky's "install
-        # from zip" expects to unpack into ~/homebrew/plugins/.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Assemble plugin directory with runtime dependencies
         run: |
-          STAGE="stage/${PLUGIN_NAME}"
-          mkdir -p "$STAGE"
-          cp -r \
-            plugin/plugin.json \
-            plugin/package.json \
-            plugin/main.py \
-            plugin/py_modules \
-            plugin/dist \
-            plugin/LICENSE \
-            plugin/README.md \
-            "$STAGE/"
-          find "$STAGE" -name '__pycache__' -type d -prune -exec rm -rf {} +
-          find "$STAGE" -name '*.pyc' -delete
-          # The sourcemap is ~1.4MB of dev-only weight on a handheld's storage.
-          rm -f "$STAGE/dist/index.js.map"
+          bash plugin/scripts/stage.sh "stage/${PLUGIN_NAME}"
+          test -f "stage/${PLUGIN_NAME}/py_modules/paho/mqtt/client.py"
+          python -B -I -c \
+            'import sys; sys.path.insert(0, sys.argv[1]); from paho.mqtt.client import Client' \
+            "stage/${PLUGIN_NAME}/py_modules"
 
       - name: Create zip
         id: zip

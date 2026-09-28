@@ -8,7 +8,8 @@ uinput writes for the same reason.
 import hmac
 import json
 import time
-from typing import Callable
+from collections.abc import Callable
+from urllib.parse import parse_qs, urlsplit
 
 from ..commands.dispatcher import Dispatcher
 from ..config import AgentConfig
@@ -38,7 +39,6 @@ except ModuleNotFoundError as missing:
         raise
     from .._stdlib_fallback.http_server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-
 # Commands are tiny JSON ({"command": "..."}); anything over this is a
 # malformed or hostile request, and we must not rfile.read() an
 # attacker-supplied length (a huge/negative Content-Length otherwise becomes a
@@ -53,6 +53,8 @@ def build_server(
     sensors_fn: Callable[[], dict] | None = None,
     games_fn: Callable[[], list[dict]] | None = None,
     wol_fn: Callable[[], dict | None] | None = None,
+    puck_snapshot_fn: Callable[[], dict] | None = None,
+    puck_events_fn: Callable[[int], list[dict]] | None = None,
 ) -> ThreadingHTTPServer:
     start_time = time.monotonic()
 
@@ -84,16 +86,30 @@ def build_server(
             if not self._authorized():
                 self._write(*handlers.handle_unauthorized())
                 return
-            if self.path == "/health":
+            url = urlsplit(self.path)
+            if url.path == "/health":
                 status, ctype, body = handlers.handle_health(
                     config, start_time, uinput_available_fn(), wol_fn() if wol_fn else None
                 )
-            elif self.path == "/status":
+            elif url.path == "/status":
                 status, ctype, body = handlers.handle_status(config, start_time)
-            elif self.path == "/sensors" and sensors_fn is not None:
+            elif url.path == "/sensors" and sensors_fn is not None:
                 status, ctype, body = handlers.handle_sensors(sensors_fn())
-            elif self.path == "/games" and games_fn is not None:
+            elif url.path == "/games" and games_fn is not None:
                 status, ctype, body = handlers.handle_games(games_fn())
+            elif url.path == "/controller-puck" and puck_snapshot_fn is not None:
+                status, ctype, body = handlers.handle_controller_puck(puck_snapshot_fn())
+            elif url.path == "/controller-puck/events" and puck_events_fn is not None:
+                try:
+                    sequence = int(parse_qs(url.query, keep_blank_values=True).get("since", ["0"])[0])
+                    if sequence < 0:
+                        raise ValueError
+                except ValueError:
+                    self._write(400, "text/plain", b"invalid since sequence")
+                    return
+                status, ctype, body = handlers.handle_controller_puck_events(
+                    puck_events_fn(sequence)
+                )
             else:
                 status, ctype, body = 404, "text/plain", b"not found"
             self._write(status, ctype, body)

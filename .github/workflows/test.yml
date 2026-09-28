@@ -68,3 +68,12 @@ jobs:
         # The release zip is useless without this file and it's gitignored,
         # so a silent build failure here would ship a plugin that won't load.
         run: test -s dist/index.js
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Smoke sideload runtime imports
+        run: |
+          bash plugin/scripts/stage.sh stage/uc-steamos-agent
+          python -B -I -c \
+            'import sys; sys.path.insert(0, sys.argv[1]); from paho.mqtt.client import Client; from uc_steamos_agent.http.server import build_server' \
+            stage/uc-steamos-agent/py_modules

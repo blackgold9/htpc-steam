@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
-# Syncs this plugin directly into ~/homebrew/plugins/ over SSH and restarts
-# Decky's plugin_loader — the fast dev-loop path, not the store-distribution
-# zip (that's `decky plugin build`, for Phase 5 packaging).
+# Stages the same self-contained files as the sideload zip, syncs them into
+# ~/homebrew/plugins/ over SSH, and restarts Decky's plugin_loader.
 #
 # Usage: DECK_HOST=my-bazzite.local [DECK_USER=deck] [DECK_PORT=22] ./scripts/deploy.sh
 # DECK_USER is whoever owns ~/homebrew on the target (Bazzite's default user if
@@ -16,10 +15,14 @@ PLUGIN_NAME="uc-steamos-agent"
 PLUGIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 REMOTE_PLUGIN_DIR="homebrew/plugins/${PLUGIN_NAME}"
 
-if [ ! -f "$PLUGIN_DIR/dist/index.js" ]; then
+if [ ! -s "$PLUGIN_DIR/dist/index.js" ]; then
   echo "dist/index.js missing — run 'pnpm build' in $PLUGIN_DIR first." >&2
   exit 1
 fi
+
+STAGE_DIR="$(mktemp -d)"
+trap 'rm -rf "$STAGE_DIR"' EXIT
+bash "$PLUGIN_DIR/scripts/stage.sh" "$STAGE_DIR/$PLUGIN_NAME"
 
 # plugin_loader re-asserts root ownership of a plugin's directory each time
 # it (re)loads it (e.g. after a restart or reboot), so this has to run
@@ -29,19 +32,11 @@ echo "Ensuring $REMOTE_PLUGIN_DIR is writable..."
 ssh -t -p "$DECK_PORT" "$DECK_USER@$DECK_HOST" \
   "sudo mkdir -p ~/$REMOTE_PLUGIN_DIR && sudo chown -R $DECK_USER:$DECK_USER ~/$REMOTE_PLUGIN_DIR"
 
-echo "Syncing $PLUGIN_DIR -> $DECK_USER@$DECK_HOST:$REMOTE_PLUGIN_DIR"
-# paho lives on the target only because the release zip pip-installs it there;
-# this checkout has none, so it must be protected from --delete (excluded
-# receiver-side files survive --delete unless --delete-excluded is passed) or
-# enabling MQTT later fails with ModuleNotFoundError and no clue why.
+echo "Syncing packaged plugin -> $DECK_USER@$DECK_HOST:$REMOTE_PLUGIN_DIR"
 rsync -azp --delete \
-  --exclude 'node_modules' --exclude '.git' --exclude 'src' --exclude 'tests' --exclude 'cli' \
-  --exclude 'py_modules/paho' \
-  --exclude 'py_modules/paho_mqtt*.dist-info' \
-  --exclude '__pycache__' --exclude '*.pyc' --exclude 'py_modules/.lock' \
-  --exclude '.pytest_cache' \
+  --exclude 'py_modules/.lock' \
   --rsh="ssh -p $DECK_PORT" \
-  "$PLUGIN_DIR"/ "$DECK_USER@$DECK_HOST:$REMOTE_PLUGIN_DIR/"
+  "$STAGE_DIR/$PLUGIN_NAME"/ "$DECK_USER@$DECK_HOST:$REMOTE_PLUGIN_DIR/"
 
 echo "Restarting Decky's plugin_loader service..."
 ssh -t -p "$DECK_PORT" "$DECK_USER@$DECK_HOST" "sudo systemctl restart plugin_loader"
