@@ -57,9 +57,6 @@ class _FakeDevice:
     def push_update(self) -> None:
         """Entities call this after a command that changes device state."""
 
-    def get_icon_base64(self, _name: str) -> str:
-        return ""
-
 
 def _capture(entity) -> dict:
     """Route the entity's updates into a dict we can assert on."""
@@ -203,6 +200,21 @@ async def test_dashboard_on_wakes_the_box():
     assert device.wakes == 1
 
 
+async def test_dashboard_on_displays_sensor_data_without_image_support():
+    device = _FakeDevice(state=STATE_ON)
+    device.current_view = "System Overview"
+    device.system_data.cpu_temp = 42.0
+    entity = await _media_player(device)
+    seen = _capture(entity)
+
+    await entity.sync_state()
+
+    assert seen[media_player.Attributes.STATE] == media_player.States.ON
+    assert seen[media_player.Attributes.SOURCE] == "System Overview"
+    assert "42.0" in seen[media_player.Attributes.MEDIA_TITLE]
+    assert media_player.Attributes.MEDIA_IMAGE_URL not in seen
+
+
 def _wol_data(**overrides) -> SystemData:
     data = SystemData()
     data.wol_present = True
@@ -262,17 +274,15 @@ async def test_wol_view_only_says_unsupported_when_the_nic_said_so():
     assert "does not advertise Wake-on-LAN" in attrs[media_player.Attributes.MEDIA_TITLE]
 
 
-def test_every_monitoring_view_is_constructible_and_iconed():
-    """A view added to MONITORING_VIEWS without an icon or a formatter case
-    shows up as a blank page on the Remote; the fallbacks make that silent."""
+def test_every_monitoring_view_has_formatted_content():
+    """A missing formatter case must not silently display only the view name."""
     from uc_intg_steamos.const import MONITORING_VIEWS
-    from uc_intg_steamos.entities.media_player import SOURCE_ICONS
 
     device = _FakeDevice(state=STATE_ON)
     entity = SteamOSMediaPlayer.__new__(SteamOSMediaPlayer)
     entity._device = device
 
     for view in MONITORING_VIEWS:
-        assert view in SOURCE_ICONS, view
         attrs = entity._format_view_data(view, _wol_data())
         assert media_player.Attributes.MEDIA_TITLE in attrs, view
+        assert attrs[media_player.Attributes.MEDIA_TITLE] != view, view

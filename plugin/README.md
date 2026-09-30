@@ -49,9 +49,9 @@ an unprivileged `ethtool` cannot see the Wake-on fields at all — and absence m
 
 - [Decky Loader](https://decky.xyz/) already installed on the target box (`ujust setup-decky` on Bazzite).
 - Node.js + `pnpm` locally, for building the QAM frontend panel.
-- Python 3.11+ locally, for staging and testing the backend. The backend uses
-  only the standard library, so staging needs no package downloads. Set
-  `PYTHON=/path/to/python` to choose a staging interpreter.
+- Python 3.11+ locally, for testing the backend. The backend uses only the
+  standard library; staging copies the shipped files and needs no Python
+  interpreter or package downloads.
 - SSH access to the target box.
 
 ## Dev loop
@@ -86,7 +86,7 @@ the shipped files work without relying on the developer's environment.
 
 ## Hardware survey
 
-Run `scripts/hwmon-dump.sh` on the target box (`ssh user@host 'bash -s' < scripts/hwmon-dump.sh`) and paste the output into `../docs/hardware-notes.md` before implementing the Phase 3 sensor collectors.
+Run `scripts/hwmon-dump.sh` on the target box (`ssh user@host 'bash -s' < scripts/hwmon-dump.sh`) when diagnosing unavailable sensors or adding support for new hardware. Record the findings in `../docs/hardware-notes.md`.
 
 ## Why this plugin needs `_root`
 

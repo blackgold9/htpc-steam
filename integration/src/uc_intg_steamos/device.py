@@ -29,9 +29,7 @@ Two structural notes, both load-bearing:
 :license: MIT
 """
 
-import base64
 import logging
-import os
 import time
 from typing import Any
 
@@ -69,7 +67,6 @@ class SteamOSDevice(PollingDevice):
         self._current_view: str = "System Overview"
         self._consecutive_failures: int = 0
         self._reconnect_poll_count: int = 0
-        self._icon_cache: dict[str, str] = {}
         self._games: list[dict[str, Any]] = []
         self._wake_deadline: float = 0.0
 
@@ -174,29 +171,6 @@ class SteamOSDevice(PollingDevice):
         self._reconnect_poll_count = 0
         self.push_update()
         return True
-
-    def get_icon_base64(self, icon_filename: str) -> str:
-        if icon_filename in self._icon_cache:
-            return self._icon_cache[icon_filename]
-
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        icon_path = os.path.join(script_dir, "icons", icon_filename)
-
-        if not os.path.exists(icon_path):
-            fallback = os.path.join(script_dir, "icons", "system_overview.png")
-            if os.path.exists(fallback):
-                icon_path = fallback
-            else:
-                return ""
-
-        try:
-            with open(icon_path, "rb") as f:
-                data = base64.b64encode(f.read()).decode("utf-8")
-                result = f"data:image/png;base64,{data}"
-                self._icon_cache[icon_filename] = result
-                return result
-        except Exception:
-            return ""
 
     async def establish_connection(self) -> None:
         """Connect if the agent answers; otherwise record why not.

@@ -1,6 +1,6 @@
 # Hardware Notes
 
-hwmon/sysfs ground truth per device, gathered by running `plugin/scripts/hwmon-dump.sh` on real hardware over SSH. Every sensor-mapping decision in `plugin/py_modules/uc_steamos_agent/sensors/` depends on this — fill in before implementing Phase 3.
+hwmon/sysfs ground truth per device, gathered by running `plugin/scripts/hwmon-dump.sh` on real hardware over SSH. These findings guide the sensor mappings in `plugin/py_modules/uc_steamos_agent/sensors/`; update them when investigating unavailable sensors or adding support for new hardware.
 
 ## Dev tooling: seeing the box's screen remotely
 

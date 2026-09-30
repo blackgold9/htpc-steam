@@ -8,13 +8,15 @@ Ported near-verbatim from upstream: `device.py`, `entities/media_player.py`, `en
 
 - All modules import and construct cleanly against the real `ucapi`/`ucapi-framework` packages (not just syntax-checked) — every entity constructor signature was checked against the actually-installed framework version, not assumed from upstream's usage.
 - `python -m uc_intg_steamos` actually starts: the real `ucapi.IntegrationAPI` logs `Driver is up: uc_intg_steamos, version: 0.1.0, api: 0.7.0` and its WebSocket server (the protocol a Remote connects over) is confirmed listening and accepting TCP connections.
-- 21 unit tests pass, including a protocol contract test that feeds the **actual live `/sensors` and `/games` JSON captured from the Bazzite test box** (`tests/fixtures/`, `tests/test_client_parsing.py`) through `client.py`'s parsers.
+- The unit tests cover protocol parsing, setup, device state, Remote entities, and Wake-on-LAN, including a contract test that feeds the **actual live `/sensors` and `/games` JSON captured from the Bazzite test box** (`tests/fixtures/`, `tests/test_client_parsing.py`) through `client.py`'s parsers.
 - **Full pairing/setup flow confirmed on a real UC Remote 3 (2026-08-23)**: driver run on the Bazzite box, discovered by the Remote over mDNS across a different subnet (`ws://bazzite.local:9090/` — direct `.local` WebSocket resolution failed cross-subnet and had to be overridden with the plain IP at registration, but mDNS *discovery* itself worked cross-subnet), registered via `POST /intg/discover/{driverId}`, and driven end-to-end through `SteamOSSetupFlow`'s real multi-step `RequestUserInput` flow (the framework's restore-prompt screen, then our device-details form) via the Remote's local REST API (`PUT /intg/setup/{driverId}`) — not simulated. Setup completed with `state: OK`, all entities came up `ACTIVE`/`CONNECTED`: `remote.*`, `media_player.*` (monitoring dashboard), `media_player.*_games` (Game Launcher), and 11 `sensor.*` entities.
+
+The monitoring dashboard is text-only: title/artist/album fields carry the system
+readings. It does not advertise image support or require local image assets.
 
 What's still **not** verified:
 
 - Whether the Remote's on-device UI renders the custom pages (`entities/remote.py`'s Navigation/Volume/Gamescope/Game Session/Function Keys/Power pages) as intended, and the Game Launcher's SOURCE_LIST — entities were confirmed created and connected via the REST API, but attributes only push live once a human adds an entity to a button/activity on the physical Remote (`ucapi_framework` no-ops attribute updates for unconfigured entities) — that UI-layout step is a personalization choice left to the user, not driven from here. Icon references (`uc:arrow-up` etc.) are copied from upstream but never visually confirmed either.
-- Media-player monitoring views' icons: `SOURCE_ICONS` in `entities/media_player.py` references `icons/*.png` files that don't exist yet in this repo (upstream's originals weren't available to port) — `device.get_icon_base64()` degrades gracefully to an empty string when a file is missing, so nothing crashes, but the media player entity will show no image until icons are added.
 
 ## Installing once you have the Remote
 

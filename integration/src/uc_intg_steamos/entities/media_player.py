@@ -22,27 +22,11 @@ from uc_intg_steamos.device import STATE_OFF, STATE_UNAVAILABLE, STATE_WAKING, S
 
 _LOG = logging.getLogger(__name__)
 
-SOURCE_ICONS = {
-    "System Overview": "system_overview.png",
-    "CPU Performance": "cpu_monitor.png",
-    "GPU Performance": "gpu_monitor.png",
-    "Memory Usage": "memory_usage.png",
-    "Storage Activity": "storage_monitor.png",
-    "Network Activity": "network_activity.png",
-    "Temperature Overview": "temperatures.png",
-    "Fan Monitoring": "fan_monitoring.png",
-    "Power Consumption": "power_consumption.png",
-    "Battery": "battery.png",
-    # Reuses the power icon; there's no dedicated WoL glyph in the icon set.
-    "Wake-on-LAN": "power_consumption.png",
-}
-
 FEATURES = [
     media_player.Features.ON_OFF,
     media_player.Features.SELECT_SOURCE,
     media_player.Features.VOLUME,
     media_player.Features.MUTE_TOGGLE,
-    media_player.Features.MEDIA_IMAGE_URL,
     media_player.Features.MEDIA_TITLE,
     media_player.Features.MEDIA_ARTIST,
     media_player.Features.MEDIA_ALBUM,
@@ -63,7 +47,6 @@ class SteamOSMediaPlayer(MediaPlayerEntity):
                 media_player.Attributes.STATE: media_player.States.STANDBY,
                 media_player.Attributes.SOURCE_LIST: MONITORING_VIEWS,
                 media_player.Attributes.SOURCE: "",
-                media_player.Attributes.MEDIA_IMAGE_URL: "",
                 media_player.Attributes.MEDIA_TITLE: "",
                 media_player.Attributes.MEDIA_ARTIST: "",
                 media_player.Attributes.MEDIA_ALBUM: "",
@@ -106,13 +89,11 @@ class SteamOSMediaPlayer(MediaPlayerEntity):
 
         data = self._device.system_data
         view = self._device.current_view
-        icon_file = SOURCE_ICONS.get(view, "system_overview.png")
 
         attrs: dict[str, Any] = {
             media_player.Attributes.STATE: media_player.States.ON,
             media_player.Attributes.SOURCE_LIST: MONITORING_VIEWS,
             media_player.Attributes.SOURCE: view,
-            media_player.Attributes.MEDIA_IMAGE_URL: self._device.get_icon_base64(icon_file),
         }
         attrs.update(self._format_view_data(view, data))
         self.update(attrs)
