@@ -75,5 +75,5 @@ jobs:
         run: |
           bash plugin/scripts/stage.sh stage/uc-steamos-agent
           python -B -I -c \
-            'import sys; sys.path.insert(0, sys.argv[1]); from paho.mqtt.client import Client; from uc_steamos_agent.http.server import build_server' \
+            'import sys; sys.path.insert(0, sys.argv[1]); from uc_steamos_agent.http.server import build_server; from uc_steamos_agent.sensors.collector import SensorCollector' \
             stage/uc-steamos-agent/py_modules

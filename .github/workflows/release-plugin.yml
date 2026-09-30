@@ -63,12 +63,11 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Assemble plugin directory with runtime dependencies
+      - name: Assemble plugin directory and smoke runtime imports
         run: |
           bash plugin/scripts/stage.sh "stage/${PLUGIN_NAME}"
-          test -f "stage/${PLUGIN_NAME}/py_modules/paho/mqtt/client.py"
           python -B -I -c \
-            'import sys; sys.path.insert(0, sys.argv[1]); from paho.mqtt.client import Client' \
+            'import sys; sys.path.insert(0, sys.argv[1]); from uc_steamos_agent.http.server import build_server; from uc_steamos_agent.sensors.collector import SensorCollector' \
             "stage/${PLUGIN_NAME}/py_modules"
 
       - name: Create zip

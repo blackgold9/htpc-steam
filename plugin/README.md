@@ -24,8 +24,9 @@ Then set up the `integration/` half to talk to it.
 Set `auth_token` in the plugin's `config.json` and restart the plugin, then
 enter the same token during integration setup. On the tested Bazzite host the
 file is `~/homebrew/settings/uc-steamos-agent/config.json` (Decky's
-`DECKY_PLUGIN_SETTINGS_DIR`). It becomes root-owned and mode `0600` after a QAM
-save, so manual edits then require `sudo`. If Decky's settings layout changes,
+`DECKY_PLUGIN_SETTINGS_DIR`). New config files are written atomically with mode
+`0600`; they are root-owned when written by the plugin, so manual edits may
+require `sudo`. If Decky's settings layout changes,
 locate `config.json` under `~/homebrew/settings/`.
 See `../docs/protocol.md`'s "Auth posture" for what the token does and doesn't
 protect against.
@@ -44,46 +45,13 @@ kernel gates, interface, driver). It is *omitted* when it can't be read — nota
 an unprivileged `ethtool` cannot see the Wake-on fields at all — and absence means
 "unknown", never "this NIC can't do Wake-on-LAN".
 
-## Steam Controller Puck pickup monitoring
-
-The backend automatically watches a connected second-generation Steam
-Controller Puck (`28de:1304`) and exposes passive state at
-`GET /controller-puck`. Confirmed pickup events can be consumed incrementally
-from `GET /controller-puck/events?since=<sequence>`. No automation is fired by
-the agent itself.
-
-The immediate `0x79=01` report is logged as a candidate but is not trusted on
-its own: the event is emitted only after a known charging/charged controller
-reports discharging. This deliberately adds roughly 1–2 seconds of latency to
-avoid waking an entertainment system because of an ordinary wireless
-disconnect. Before attaching actions, leave the agent running during idle,
-sleep/wake, Steam restarts, and controller power-off, then inspect
-`diagnostics.unconfirmed_disconnect_count` for false candidates. Full field
-semantics are in `../docs/protocol.md`.
-
-## Home Assistant MQTT discovery
-
-The agent can publish the HTPC sensors and Steam Controller state directly to
-an existing Home Assistant MQTT broker. It creates linked **SteamOS Agent** and
-**Steam Controller Puck** devices through MQTT Discovery; pickup candidates are
-published immediately and confirmed pickups follow when the charge transition
-arrives.
-
-MQTT is disabled by default and is strictly read-only: this implementation has
-no MQTT command topic and cannot trigger key input, launch games, terminate a
-game, or change power state. Configure and live-apply the broker connection from
-the plugin's **Home Assistant MQTT** QAM section; the saved password is never
-returned to the frontend. Broker fields can still be edited manually for
-recovery. Entity details, topic retention, and a least-privilege Mosquitto ACL
-are documented in [`../docs/mqtt.md`](../docs/mqtt.md).
-
 ## Prerequisites
 
 - [Decky Loader](https://decky.xyz/) already installed on the target box (`ujust setup-decky` on Bazzite).
 - Node.js + `pnpm` locally, for building the QAM frontend panel.
-- Python 3.11+ with `pip` locally, for installing the pinned runtime dependency
-  into the staged plugin. Set `PYTHON=/path/to/venv/bin/python` if the system
-  Python has no `pip`. The target does not need Python package installation.
+- Python 3.11+ locally, for staging and testing the backend. The backend uses
+  only the standard library, so staging needs no package downloads. Set
+  `PYTHON=/path/to/python` to choose a staging interpreter.
 - SSH access to the target box.
 
 ## Dev loop
@@ -94,32 +62,27 @@ pnpm build                 # builds src/index.tsx -> dist/index.js
 DECK_HOST=my-box.local DECK_USER=my-user ./scripts/deploy.sh
 ```
 
-`deploy.sh` and the release workflow both use `scripts/stage.sh` to bundle
-`paho-mqtt` into `py_modules/`; a fresh install does not depend on target-side
-`pip` or a previously deployed copy. Each deploy downloads runtime wheels
-locally, stages the plugin in a temporary directory, and restarts Decky.
+`deploy.sh` and the release workflow both use `scripts/stage.sh` to assemble
+the same self-contained plugin directory. Each deploy stages the plugin in a
+temporary directory, syncs it to the target, and restarts Decky. The sync removes
+obsolete plugin files while preserving Decky's `py_modules/.lock`; settings live
+outside the plugin directory and are not replaced.
 
 Then open the Quick Access Menu on the box and look for "UC SteamOS Agent".
-Check the **Home Assistant MQTT** section, save a harmless settings change,
-reload the plugin, and verify the change persists. `GET /health` alone proves
-only the backend loaded; it does not prove the QAM panel works.
-
-On-device QAM check on Bazzite with Decky 3.2.9: the plugin panel rendered,
-saved a disabled-MQTT interval change, and showed the original value again
-after saving it back and reloading the plugin. This proves the settings bridge
-works; it does not verify a broker connection.
+Verify its status, listening address, and uinput access rows. `GET /health`
+alone proves only the backend loaded; it does not prove the QAM panel works.
 
 ## Backend tests (no Decky runtime needed)
 
 ```bash
 pip install pytest
-pytest tests/
+PYTHONPATH=py_modules pytest tests/
 ```
 
 `py_modules/uc_steamos_agent/` is testable without the `decky` module; only
-`main.py` needs the real Decky runtime. The release bundle vendors the pinned
-`paho-mqtt` runtime into `py_modules/` so the target does not need pip or network
-access during installation.
+`main.py` needs the real Decky runtime. CI also imports the HTTP server and sensor
+collector from a staged package in an isolated Python process, verifying that
+the shipped files work without relying on the developer's environment.
 
 ## Hardware survey
 

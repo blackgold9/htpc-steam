@@ -6,6 +6,8 @@ One port, default **8086** (configurable), single HTTP server — unlike upstrea
 
 ## Endpoints
 
+### `GET /health`
+
 ```json
 {"status": "ok", "version": "0.1.0", "uptime_s": 123.4, "uinput_available": true, "wol_arm": false, "wol": {"reported": true, "supported": true, "enabled": false, "supported_flags": "pumbg", "wake_on": "", "interface": "enp9s0", "driver": "r8169", "may_wakeup": true, "mac_address": "30:56:0f:b6:7a:9e"}}
 ```
@@ -60,80 +62,6 @@ Unavailable sensors are `null`, not `0`, so the integration can mark an entity u
 ```
 
 Recently-played, currently-installed games, most recent first (`last_played` is a Unix epoch). Built from `localconfig.vdf` cross-referenced with `appmanifest_*.acf` (`plugin/py_modules/uc_steamos_agent/games/library.py`) — see `docs/hardware-notes.md` for why that source was chosen over the appmanifest's own (stale) `LastPlayed` field, and how compat tools (Proton, Steam Linux Runtime) get filtered out. `404` if the desktop user's home directory couldn't be resolved. To launch one, send `launch_game:<appid>` to `POST /command` (`docs/command-mapping.md`). Status: Phase 5, live-verified.
-
-### `GET /controller-puck`
-
-Passive state for a second-generation Steam Controller Puck (`28de:1304`). The
-agent opens the Puck's `if02` and `if06` hidraw collections read-only; this can
-run alongside Steam and does not send feature/output reports to the controller.
-
-```json
-{
-  "schema_version": 1,
-  "boot_id": "80cc7d9f6e5f4cb4a5de076c8e8a90ea",
-  "current_sequence": 1,
-  "available": true,
-  "docked": false,
-  "charge_state": "discharging",
-  "battery_percent": 54,
-  "pickup_candidate": false,
-  "last_pickup_event": {
-    "boot_id": "80cc7d9f6e5f4cb4a5de076c8e8a90ea",
-    "sequence": 1,
-    "timestamp": 1789831635.981,
-    "confirmation_delay_ms": 1505,
-    "source": "wireless_then_charge"
-  },
-  "diagnostics": {
-    "wireless_disconnect_count": 1,
-    "wireless_connect_count": 1,
-    "confirmed_pickup_count": 1,
-    "unconfirmed_disconnect_count": 0
-  }
-}
-```
-
-`0x79=01` is treated only as a fast **candidate**, because Valve/SDL document it
-as a wireless disconnect edge rather than a dock-presence signal. It never
-creates a pickup event by itself. A pickup is confirmed only when a previously
-known charging/charged state (`0x43` state 2/4) changes to discharging (state 1)
-within the three-second candidate window. Both signals are required; a charge
-transition without the immediate edge remains state-only and does not create an
-event. Starting the agent while the controller is already discharging does not
-synthesize an event.
-
-`available` means the Puck hidraw collection is currently open. `docked` stays
-`null` until the first battery report. Diagnostic counters are intended for an
-initial no-side-effect soak test: an increasing `unconfirmed_disconnect_count`
-shows how often the fast signal would have false-triggered an immediate action.
-If multiple Pucks are attached, the monitor deliberately selects one physical
-Puck and ignores the others so reports from different controllers cannot be
-combined into a false event.
-
-### `GET /controller-puck/events?since=<sequence>`
-
-Returns retained confirmed pickup events newer than `sequence`:
-
-```json
-{
-  "boot_id": "80cc7d9f6e5f4cb4a5de076c8e8a90ea",
-  "current_sequence": 1,
-  "events": [{
-    "boot_id": "80cc7d9f6e5f4cb4a5de076c8e8a90ea",
-    "sequence": 1,
-    "timestamp": 1789831635.981,
-    "confirmation_delay_ms": 1505,
-    "source": "wireless_then_charge"
-  }]
-}
-```
-
-The agent retains the latest 64 events in memory. `boot_id` changes and
-`current_sequence` resets when the plugin restarts. Both cursor fields are
-returned even when `events` is empty, so a consumer holding a high sequence
-from the previous process can detect the new epoch immediately. Omitting
-`since` is equivalent to `since=0`; negative or non-integer values return
-`400`.
 
 ## Auth posture
 

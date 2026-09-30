@@ -26,8 +26,8 @@ cp -r \
   "$STAGE/"
 cp -r "$PLUGIN_DIR/py_modules/uc_steamos_agent" "$STAGE/py_modules/"
 
-# Decky's frozen Python does not use the developer machine's site-packages.
-# Install the pinned runtime dependencies into the directory Decky adds to sys.path.
+# The backend is stdlib-only today. If runtime dependencies are added later,
+# bundle them here: Decky's frozen Python cannot use local site-packages.
 "${PYTHON:-python3}" - "$PLUGIN_DIR/pyproject.toml" "$STAGE/py_modules" <<'PY'
 import subprocess
 import sys

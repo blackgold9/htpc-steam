@@ -9,7 +9,7 @@ import hmac
 import json
 import time
 from collections.abc import Callable
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import urlsplit
 
 from ..commands.dispatcher import Dispatcher
 from ..config import AgentConfig
@@ -53,8 +53,6 @@ def build_server(
     sensors_fn: Callable[[], dict] | None = None,
     games_fn: Callable[[], list[dict]] | None = None,
     wol_fn: Callable[[], dict | None] | None = None,
-    puck_snapshot_fn: Callable[[], dict] | None = None,
-    puck_events_fn: Callable[[int], list[dict]] | None = None,
 ) -> ThreadingHTTPServer:
     start_time = time.monotonic()
 
@@ -97,19 +95,6 @@ def build_server(
                 status, ctype, body = handlers.handle_sensors(sensors_fn())
             elif url.path == "/games" and games_fn is not None:
                 status, ctype, body = handlers.handle_games(games_fn())
-            elif url.path == "/controller-puck" and puck_snapshot_fn is not None:
-                status, ctype, body = handlers.handle_controller_puck(puck_snapshot_fn())
-            elif url.path == "/controller-puck/events" and puck_events_fn is not None:
-                try:
-                    sequence = int(parse_qs(url.query, keep_blank_values=True).get("since", ["0"])[0])
-                    if sequence < 0:
-                        raise ValueError
-                except ValueError:
-                    self._write(400, "text/plain", b"invalid since sequence")
-                    return
-                status, ctype, body = handlers.handle_controller_puck_events(
-                    puck_events_fn(sequence)
-                )
             else:
                 status, ctype, body = 404, "text/plain", b"not found"
             self._write(status, ctype, body)

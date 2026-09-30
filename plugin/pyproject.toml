@@ -2,7 +2,7 @@
 name = "uc-steamos-agent"
 version = "0.1.0"
 requires-python = ">=3.11"
-dependencies = ["paho-mqtt==2.1.0"]
+dependencies = []
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -10,4 +10,5 @@ testpaths = ["tests"]
 [tool.ruff]
 line-length = 110
 target-version = "py311"
-extend-exclude = ["py_modules/http", "py_modules/socketserver.py"]
+# Verbatim CPython 3.11.7 copies; not our code to style.
+extend-exclude = ["py_modules/uc_steamos_agent/_stdlib_fallback"]

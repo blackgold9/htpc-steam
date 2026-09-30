@@ -73,14 +73,6 @@ def handle_games(games: list[dict]) -> tuple[int, str, bytes]:
     return 200, "application/json", json.dumps({"games": games}).encode("utf-8")
 
 
-def handle_controller_puck(snapshot: dict) -> tuple[int, str, bytes]:
-    return 200, "application/json", json.dumps(snapshot).encode("utf-8")
-
-
-def handle_controller_puck_events(cursor: dict) -> tuple[int, str, bytes]:
-    return 200, "application/json", json.dumps(cursor).encode("utf-8")
-
-
 def handle_unauthorized() -> tuple[int, str, bytes]:
     """401 for a missing/wrong X-UC-Token when the agent has a token configured.
 
